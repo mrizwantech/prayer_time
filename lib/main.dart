@@ -3,6 +3,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'screens/home_screen.dart';
 import 'screens/qibla_screen.dart';
 import 'screens/settings_screen.dart';
+import 'package:provider/provider.dart';
+import 'core/time_format_settings.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,7 +14,10 @@ void main() async {
       supportedLocales: const [Locale('en'), Locale('ar')],
       path: 'assets/translations',
       fallbackLocale: const Locale('en'),
-      child: const MyApp(),
+      child: ChangeNotifierProvider(
+        create: (_) => TimeFormatSettings(),
+        child: const MyApp(),
+      ),
     ),
   );
 }
