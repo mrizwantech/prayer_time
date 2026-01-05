@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:geolocator/geolocator.dart';
 import '../data/datasources/prayer_time_data_source_impl.dart';
@@ -9,6 +10,7 @@ import '../domain/entities/prayer_time.dart';
 import 'package:provider/provider.dart';
 import '../core/time_format_settings.dart';
 import '../presentation/widgets/digital_prayer_clock.dart';
+import '../presentation/widgets/prayer_timeline.dart';
 import 'package:provider/provider.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+      Timer? _countdownTimer;
     String? _city;
     String? _state;
   PrayerTime? _prayerTime;
@@ -114,10 +117,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _startCountdown(DateTime nextPrayerTime) {
-    Future.delayed(const Duration(seconds: 1), () {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer(const Duration(seconds: 1), () {
       if (!mounted) return;
       _updateNextPrayer();
     });
+  }
+  @override
+  void dispose() {
+    _countdownTimer?.cancel();
+    super.dispose();
   }
 
   String _formatDuration(Duration? duration) {
@@ -211,47 +220,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final is24Hour = Provider.of<TimeFormatSettings>(context).is24Hour;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        title: const Text('Prayer Times', style: TextStyle(color: Color(0xFF222B45), fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: const IconThemeData(color: Color(0xFF222B45)),
+    return const SafeArea(
+      child: SingleChildScrollView(
+        child: PrayerTimeline(),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Text('Error: $_error'))
-              : _prayerTime == null
-                  ? const Center(child: Text('No data'))
-                  : SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_city != null && _state != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 24, bottom: 8),
-                              child: Text(
-                                '$_city, $_state',
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF222B45),
-                                ),
-                              ),
-                            ),
-                          Center(
-                            child: DigitalPrayerClock(
-                              prayers: _getPrayerBlocks(is24Hour),
-                              activeIndex: _getActivePrayerIndex(),
-                              is24Hour: is24Hour,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
     );
   }
 }

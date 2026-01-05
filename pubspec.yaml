@@ -40,6 +40,7 @@ dependencies:
 
   # Local notifications
   flutter_local_notifications: ^19.5.0
+  timezone: ^0.10.1
 
   # Qibla direction
   flutter_qiblah: ^3.1.0+1
@@ -48,7 +49,9 @@ dependencies:
   easy_localization: ^3.0.8
   geolocator: ^13.0.4
   provider: ^6.1.5+1
+  confetti: ^0.7.0
   geocoding: ^4.0.0
+  font_awesome_flutter: ^10.8.0
 
 dev_dependencies:
   flutter_test:
