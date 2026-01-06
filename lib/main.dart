@@ -5,6 +5,7 @@ import 'screens/home_screen.dart';
 import 'screens/qibla_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/adhan_player_screen.dart';
+import 'screens/tasbeeh_screen.dart';
 import 'features/prayer_tracker/prayer_tracker_screen.dart';
 import 'package:provider/provider.dart';
 import 'core/time_format_settings.dart';
@@ -132,6 +133,7 @@ class _MainNavigationState extends State<MainNavigation> {
   int selectedIndex = 0;
   final List<Widget> screens = const [
     HomeScreen(),
+    TasbeehScreen(),
     QiblaScreen(),
     PrayerTrackerScreen(),
     SettingsScreen(),
@@ -373,6 +375,10 @@ class _MainNavigationState extends State<MainNavigation> {
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
             label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.radio_button_checked),
+            label: 'Tasbeeh',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.explore),

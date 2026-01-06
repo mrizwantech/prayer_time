@@ -37,6 +37,15 @@ dependencies:
 
   # Prayer times calculation
   adhan: ^2.0.0+1
+  
+  # Hijri (Islamic) calendar
+  hijri_date: ^1.0.0
+  
+  # Date/time formatting
+  intl: ^0.20.2
+  
+  # Text to speech
+  flutter_tts: ^4.2.5
 
   # Local notifications
   flutter_local_notifications: ^19.5.0

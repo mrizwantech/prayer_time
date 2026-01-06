@@ -253,6 +253,58 @@ class AdhanNotificationService {
     }
   }
 
+  /// Schedule a simple notification for Sunrise (no adhan sound)
+  Future<void> scheduleSunriseNotification({
+    required int id,
+    required DateTime sunriseTime,
+  }) async {
+    final timeUntilSunrise = sunriseTime.difference(DateTime.now());
+    
+    if (timeUntilSunrise.isNegative) return;
+
+    final scheduledTime = tz.TZDateTime.from(sunriseTime, tz.local);
+    
+    debugPrint('📅 Scheduling Sunrise notification:');
+    debugPrint('   Sunrise time: $sunriseTime');
+    debugPrint('   TZ scheduled time: $scheduledTime');
+
+    try {
+      await _notifications.zonedSchedule(
+        id,
+        '🌅 Sunrise',
+        'The sun has risen. Have a blessed day!',
+        scheduledTime,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channelId,
+            _channelName,
+            channelDescription: _channelDescription,
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+            autoCancel: true,
+            icon: '@mipmap/ic_launcher',
+            styleInformation: const BigTextStyleInformation(
+              'The sun has risen. Have a blessed day!',
+              contentTitle: '🌅 Sunrise',
+            ),
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'Sunrise',
+      );
+      debugPrint('✅ Sunrise notification scheduled');
+    } catch (e) {
+      debugPrint('Error scheduling Sunrise notification: $e');
+    }
+  }
+
   Future<void> snoozeNotification({
     required int id,
     required String prayerName,
@@ -552,6 +604,13 @@ class AdhanNotificationService {
         'Maghrib': prayerTimes.maghrib,
         'Isha': prayerTimes.isha,
       };
+
+      // Schedule Sunrise notification (simple notification, no adhan)
+      await scheduleSunriseNotification(
+        id: 99, // Use ID 99 for Sunrise
+        sunriseTime: prayerTimes.sunrise,
+      );
+      debugPrint('Scheduled Sunrise at ${prayerTimes.sunrise}');
 
       // Schedule notifications for each prayer
       int id = 100; // Starting ID for prayer notifications

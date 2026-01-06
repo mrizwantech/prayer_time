@@ -143,7 +143,9 @@ class AdhanService : Service() {
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build()
                 )
-                setDataSource(resources.openRawResourceFd(resourceId))
+                resources.openRawResourceFd(resourceId).use { afd ->
+                    setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                }
                 prepare()
                 setOnCompletionListener {
                     Log.d(TAG, "Adhan playback completed")
@@ -213,7 +215,7 @@ class AdhanService : Service() {
                 "Azanify::AdhanWakeLock"
             )
         }
-        wakeLock?.acquire(10 * 60 * 1000L) // 10 minute timeout
+        wakeLock?.acquire(5 * 60 * 1000L) // 5 minute timeout, aligned with typical adhan duration
         Log.d(TAG, "🔓 WakeLock acquired")
     }
     
