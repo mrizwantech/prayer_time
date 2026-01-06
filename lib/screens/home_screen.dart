@@ -9,9 +9,10 @@ import '../domain/usecases/get_prayer_times.dart';
 import '../domain/entities/prayer_time.dart';
 import 'package:provider/provider.dart';
 import '../core/time_format_settings.dart';
+import '../core/location_provider.dart';
 import '../presentation/widgets/digital_prayer_clock.dart';
 import '../presentation/widgets/prayer_timeline.dart';
-import 'package:provider/provider.dart';
+import '../presentation/widgets/app_header.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,20 +22,50 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-      Timer? _countdownTimer;
-    String? _city;
-    String? _state;
+  Timer? _countdownTimer;
+  String? _city;
+  String? _state;
   PrayerTime? _prayerTime;
-  bool _loading = true;
+  bool _loading = false;  // Start with false, check cache first
   String? _error;
   String? _nextPrayerName;
   Duration? _nextPrayerCountdown;
   final List<String> _prayerNames = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+  
+  // Static cache to preserve data across navigation
+  static PrayerTime? _cachedPrayerTime;
+  static String? _cachedCity;
+  static String? _cachedState;
+  static DateTime? _cacheDate;
 
   @override
   void initState() {
     super.initState();
-    _fetchPrayerTimes();
+    _initializeData();
+  }
+  
+  void _initializeData() {
+    // Check if we have cached data from today - SYNC, no setState needed
+    final now = DateTime.now();
+    if (_cachedPrayerTime != null && 
+        _cacheDate != null && 
+        _cacheDate!.year == now.year &&
+        _cacheDate!.month == now.month &&
+        _cacheDate!.day == now.day) {
+      // Use cached data - instant load, no async needed
+      _prayerTime = _cachedPrayerTime;
+      _city = _cachedCity;
+      _state = _cachedState;
+      _loading = false;
+      // Schedule update after build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _updateNextPrayer();
+      });
+    } else {
+      // Need to fetch - show loading
+      _loading = true;
+      _fetchPrayerTimes();
+    }
   }
 
   Future<void> _fetchPrayerTimes() async {
@@ -53,20 +84,37 @@ class _HomeScreenState extends State<HomeScreen> {
       if (permission == LocationPermission.deniedForever) {
         throw Exception('Location permissions are permanently denied.');
       }
-      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      
+      // Try last known position first for faster load
+      Position? position = await Geolocator.getLastKnownPosition();
+      position ??= await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
+      
       final double latitude = position.latitude;
       final double longitude = position.longitude;
-      await _fetchCityState(latitude, longitude);
+      
+      // Fetch prayer times first (don't wait for geocoding)
       final date = DateTime.now();
       final dataSource = PrayerTimeDataSourceImpl();
       final repository = PrayerTimeRepositoryImpl(dataSource);
       final getPrayerTimes = GetPrayerTimes(repository);
       final result = await getPrayerTimes(latitude: latitude, longitude: longitude, date: date);
+      
+      // Cache prayer results immediately
+      _cachedPrayerTime = result;
+      _cacheDate = DateTime.now();
+      
       setState(() {
         _prayerTime = result;
         _loading = false;
       });
       _updateNextPrayer();
+      
+      // Fetch location in parallel (fire-and-forget to avoid blocking)
+      _fetchCityState(latitude, longitude).then((_) {
+        // Update cache after geocoding completes
+        _cachedCity = _city;
+        _cachedState = _state;
+      });
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -78,14 +126,17 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchCityState(double lat, double lng) async {
     try {
       List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
+      debugPrint('🌍 Geocoding results: ${placemarks.length} placemarks found');
       if (placemarks.isNotEmpty) {
+        final mark = placemarks.first;
+        debugPrint('📍 City: ${mark.locality}, State: ${mark.administrativeArea}');
         setState(() {
-          _city = placemarks.first.locality;
-          _state = placemarks.first.administrativeArea;
+          _city = mark.locality ?? mark.subAdministrativeArea;
+          _state = mark.administrativeArea;
         });
       }
     } catch (e) {
-      // Ignore geocoding errors for now
+      debugPrint('❌ Geocoding error: $e');
     }
   }
 
@@ -220,10 +271,95 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final is24Hour = Provider.of<TimeFormatSettings>(context).is24Hour;
-    return const SafeArea(
-      child: SingleChildScrollView(
-        child: PrayerTimeline(),
+    final locationProvider = Provider.of<LocationProvider>(context);
+    
+    return SafeArea(
+      child: Column(
+        children: [
+          // App Header with Location and Refresh
+          AppHeader(
+            city: locationProvider.city ?? _city,
+            state: locationProvider.state ?? _state,
+            isLoading: locationProvider.isLoading || _loading,
+            onRefresh: () async {
+              await locationProvider.refreshLocation();
+              await _refreshLocation();
+            },
+            showLocation: true,
+          ),
+          // Prayer Timeline
+          Expanded(
+            child: SingleChildScrollView(
+              child: const PrayerTimeline(),
+            ),
+          ),
+        ],
       ),
     );
+  }
+  
+  Future<void> _refreshLocation() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      // Clear cache to force fresh fetch
+      _cacheDate = null;
+      
+      // Get fresh location
+      Position? position = await Geolocator.getLastKnownPosition();
+      position ??= await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
+      
+      final double latitude = position.latitude;
+      final double longitude = position.longitude;
+      
+      // Fetch new location info
+      await _fetchCityState(latitude, longitude);
+      
+      // Fetch new prayer times
+      final date = DateTime.now();
+      final dataSource = PrayerTimeDataSourceImpl();
+      final repository = PrayerTimeRepositoryImpl(dataSource);
+      final getPrayerTimes = GetPrayerTimes(repository);
+      final result = await getPrayerTimes(latitude: latitude, longitude: longitude, date: date);
+      
+      // Update cache
+      _cachedPrayerTime = result;
+      _cachedCity = _city;
+      _cachedState = _state;
+      _cacheDate = DateTime.now();
+      
+      setState(() {
+        _prayerTime = result;
+        _loading = false;
+      });
+      
+      // Trigger prayer timeline refresh
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Location updated successfully'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      _updateNextPrayer();
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating location: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 }

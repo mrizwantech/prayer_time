@@ -37,6 +37,15 @@ dependencies:
 
   # Prayer times calculation
   adhan: ^2.0.0+1
+  
+  # Hijri (Islamic) calendar
+  hijri_date: ^1.0.0
+  
+  # Date/time formatting
+  intl: ^0.20.2
+  
+  # Text to speech
+  flutter_tts: ^4.2.5
 
   # Local notifications
   flutter_local_notifications: ^19.5.0
@@ -52,6 +61,13 @@ dependencies:
   confetti: ^0.7.0
   geocoding: ^4.0.0
   font_awesome_flutter: ^10.8.0
+  
+  # Motion sensors for prayer tracking
+  sensors_plus: ^6.0.1
+  vibration: ^2.0.0
+  shared_preferences: ^2.5.4
+  flutter_timezone: ^5.0.1
+  audioplayers: ^6.5.1
 
 dev_dependencies:
   flutter_test:
@@ -81,6 +97,7 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/translations/
+    - assets/sounds/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
