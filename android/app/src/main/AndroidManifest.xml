@@ -6,19 +6,35 @@
     <!-- Exact alarm permission for precise prayer time notifications -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- Battery optimization exemption for reliable background notifications -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <!-- Required to receive boot completed events to reschedule notifications -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Vibration for notification alerts -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Fullscreen intent permission for launching adhan player on lock screen -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <!-- Wake lock to show adhan player even when screen is off -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Foreground service permission for adhan playback -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <!-- Required to launch activity from background on Android 10+ -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <application
-        android:label="islamic_prayer_times"
+        android:label="Azanify"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:taskAffinity=""
+            android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true">
             <!-- Specifies an Android theme to apply to this Activity as soon as
                  the Android process has started. This theme is visible to the user
                  while the Flutter UI initializes. After that, this theme continues
@@ -37,6 +53,29 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        
+        <!-- Adhan playback service -->
+        <service
+            android:name=".AdhanService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+        
+        <!-- Adhan alarm receiver for auto-launching prayer screen -->
+        <receiver
+            android:name=".AdhanAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        
+        <!-- Receivers for scheduled notifications -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" />
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

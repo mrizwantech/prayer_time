@@ -25,11 +25,15 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
   Timer? timer;
   bool isManualSelection = false;
   Timer? manualSelectionTimer;
+  
+  // Static cache to preserve data across navigation
+  static List<Map<String, dynamic>> _cachedPrayers = [];
+  static DateTime? _cacheDate;
 
   @override
   void initState() {
     super.initState();
-    _loadPrayerTimes();
+    _initializePrayerTimes();
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!isManualSelection && prayers.isNotEmpty) {
         setState(() {
@@ -38,12 +42,31 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
       }
     });
   }
+  
+  void _initializePrayerTimes() {
+    final now = DateTime.now();
+    // Check if we have cached data from today
+    if (_cachedPrayers.isNotEmpty && 
+        _cacheDate != null && 
+        _cacheDate!.year == now.year &&
+        _cacheDate!.month == now.month &&
+        _cacheDate!.day == now.day) {
+      // Use cached data - instant load
+      prayers = _cachedPrayers;
+      isLoading = false;
+      _updateCurrentPrayerAndProgress();
+    } else {
+      // Fetch fresh data
+      _loadPrayerTimes();
+    }
+  }
 
   Future<void> _loadPrayerTimes() async {
     try {
-      // Get current location
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+      // Try last known position first for faster load
+      Position? position = await Geolocator.getLastKnownPosition();
+      position ??= await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
       );
 
       // Calculate prayer times using adhan package
@@ -66,6 +89,9 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
           {'name': 'Isha', 'time': formatPrayerTime(prayerTimes.isha), 'icon': '🌙', 'dateTime': prayerTimes.isha},
           {'name': 'Tahajjud (Qiyam-u-lail)', 'time': '00:00', 'icon': '🌌', 'dateTime': DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day + 1, 0, 0)},
         ];
+        // Cache the results
+        _cachedPrayers = prayers;
+        _cacheDate = DateTime.now();
         isLoading = false;
         _updateCurrentPrayerAndProgress();
       });
