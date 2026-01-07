@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:convert';
-import '../core/prayer_theme_provider.dart';
 import '../presentation/widgets/app_header.dart';
 
 class TasbeehScreen extends StatefulWidget {
@@ -21,7 +20,8 @@ class _TasbeehScreenState extends State<TasbeehScreen>
   int _selectedDhikrIndex = 0;
 
   // Calculate total from all saved counts
-  int get _totalCount => _savedCounts.values.fold(0, (sum, count) => sum + count);
+  int get _totalCount =>
+      _savedCounts.values.fold(0, (sum, count) => sum + count);
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
@@ -222,16 +222,18 @@ class _TasbeehScreenState extends State<TasbeehScreen>
 
     // Show completion dialog
     if (mounted) {
+      final theme = Theme.of(context);
+      final isDark = theme.brightness == Brightness.dark;
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1a1d2e),
+          backgroundColor: theme.colorScheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text(
+          title: Text(
             '🎉 Completed!',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: theme.colorScheme.onSurface),
             textAlign: TextAlign.center,
           ),
           content: Column(
@@ -239,14 +241,16 @@ class _TasbeehScreenState extends State<TasbeehScreen>
             children: [
               Text(
                 'You have completed $_targetCount ${_dhikrList[_selectedDhikrIndex]['transliteration']}',
-                style: const TextStyle(color: Colors.white70),
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'May Allah accept your worship',
                 style: TextStyle(
-                  color: Color(0xFF00D9A5),
+                  color: theme.colorScheme.primary,
                   fontStyle: FontStyle.italic,
                 ),
                 textAlign: TextAlign.center,
@@ -259,15 +263,20 @@ class _TasbeehScreenState extends State<TasbeehScreen>
                 Navigator.pop(context);
                 _reset();
               },
-              child: const Text('Reset', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'Reset',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                ),
+              ),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
               },
-              child: const Text(
+              child: Text(
                 'Continue',
-                style: TextStyle(color: Color(0xFF00D9A5)),
+                style: TextStyle(color: theme.colorScheme.primary),
               ),
             ),
           ],
@@ -312,18 +321,20 @@ class _TasbeehScreenState extends State<TasbeehScreen>
     final meaningController = TextEditingController();
     bool isUnlimited = true;
     int customTarget = 100;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF1a1d2e),
+          backgroundColor: theme.colorScheme.surface,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text(
+          title: Text(
             'Add Custom Dhikr',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: theme.colorScheme.onSurface),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -331,58 +342,79 @@ class _TasbeehScreenState extends State<TasbeehScreen>
               children: [
                 TextField(
                   controller: arabicController,
-                  style: const TextStyle(color: Colors.white, fontSize: 20),
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurface,
+                    fontSize: 20,
+                  ),
                   textAlign: TextAlign.center,
                   decoration: InputDecoration(
                     labelText: 'Arabic Text (optional)',
-                    labelStyle: const TextStyle(color: Colors.white54),
+                    labelStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
                     hintText: 'سُبْحَانَ اللّٰهِ',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.3),
+                    ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.white24),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.onSurface.withOpacity(0.2),
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF00D9A5)),
+                      borderSide: BorderSide(color: theme.colorScheme.primary),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: transliterationController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: theme.colorScheme.onSurface),
                   decoration: InputDecoration(
                     labelText: 'Dhikr Name / Text *',
-                    labelStyle: const TextStyle(color: Colors.white54),
+                    labelStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
                     hintText: 'e.g., SubhanAllah',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.3),
+                    ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.white24),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.onSurface.withOpacity(0.2),
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF00D9A5)),
+                      borderSide: BorderSide(color: theme.colorScheme.primary),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: meaningController,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: theme.colorScheme.onSurface),
                   decoration: InputDecoration(
                     labelText: 'Meaning (optional)',
-                    labelStyle: const TextStyle(color: Colors.white54),
+                    labelStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+                    ),
                     hintText: 'e.g., Glory be to Allah',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurface.withOpacity(0.3),
+                    ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.white24),
+                      borderSide: BorderSide(
+                        color: theme.colorScheme.onSurface.withOpacity(0.2),
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF00D9A5)),
+                      borderSide: BorderSide(color: theme.colorScheme.primary),
                     ),
                   ),
                 ),
@@ -390,9 +422,11 @@ class _TasbeehScreenState extends State<TasbeehScreen>
                 // Unlimited toggle
                 Row(
                   children: [
-                    const Text(
+                    Text(
                       'Unlimited Count',
-                      style: TextStyle(color: Colors.white70),
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.7),
+                      ),
                     ),
                     const Spacer(),
                     Switch(
@@ -402,7 +436,7 @@ class _TasbeehScreenState extends State<TasbeehScreen>
                           isUnlimited = value;
                         });
                       },
-                      activeColor: const Color(0xFF00D9A5),
+                      activeColor: theme.colorScheme.primary,
                     ),
                   ],
                 ),
@@ -410,24 +444,30 @@ class _TasbeehScreenState extends State<TasbeehScreen>
                   const SizedBox(height: 8),
                   TextField(
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: theme.colorScheme.onSurface),
                     onChanged: (value) {
                       customTarget = int.tryParse(value) ?? 100;
                     },
                     decoration: InputDecoration(
                       labelText: 'Target Count',
-                      labelStyle: const TextStyle(color: Colors.white54),
+                      labelStyle: TextStyle(
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
+                      ),
                       hintText: '100',
                       hintStyle: TextStyle(
-                        color: Colors.white.withOpacity(0.3),
+                        color: theme.colorScheme.onSurface.withOpacity(0.3),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Colors.white24),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.onSurface.withOpacity(0.2),
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFF00D9A5)),
+                        borderSide: BorderSide(
+                          color: theme.colorScheme.primary,
+                        ),
                       ),
                     ),
                   ),
@@ -438,7 +478,12 @@ class _TasbeehScreenState extends State<TasbeehScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+                ),
+              ),
             ),
             TextButton(
               onPressed: () {
@@ -482,13 +527,13 @@ class _TasbeehScreenState extends State<TasbeehScreen>
                     content: Text(
                       'Added "${transliterationController.text.trim()}"',
                     ),
-                    backgroundColor: const Color(0xFF00D9A5),
+                    backgroundColor: theme.colorScheme.primary,
                   ),
                 );
               },
-              child: const Text(
+              child: Text(
                 'Add',
-                style: TextStyle(color: Color(0xFF00D9A5)),
+                style: TextStyle(color: theme.colorScheme.primary),
               ),
             ),
           ],
@@ -500,24 +545,30 @@ class _TasbeehScreenState extends State<TasbeehScreen>
   void _showDeleteCustomDhikrDialog(int index) {
     final dhikr = _dhikrList[index];
     if (dhikr['isCustom'] != true) return;
+    final theme = Theme.of(context);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1a1d2e),
+        backgroundColor: theme.colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
+        title: Text(
           'Delete Custom Dhikr?',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: theme.colorScheme.onSurface),
         ),
         content: Text(
           'Are you sure you want to delete "${dhikr['transliteration']}"?',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: theme.colorScheme.onSurface.withOpacity(0.7)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
           ),
           TextButton(
             onPressed: () {
@@ -546,10 +597,13 @@ class _TasbeehScreenState extends State<TasbeehScreen>
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = PrayerThemeProvider();
-    final currentTheme = themeProvider.getCurrentTheme(
-      'Isha',
-    ); // Use Isha theme for Tasbeeh
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final accentColor = theme.colorScheme.primary;
+    final textColor = theme.colorScheme.onSurface;
+    final backgroundColor = theme.scaffoldBackgroundColor;
+    final surfaceColor = theme.colorScheme.surface;
+
     final dhikr = _dhikrList[_selectedDhikrIndex];
     final isUnlimited = _targetCount <= 0;
     final progressPercent = isUnlimited
@@ -557,366 +611,340 @@ class _TasbeehScreenState extends State<TasbeehScreen>
         : (_count / _targetCount).clamp(0.0, 1.0);
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: currentTheme.backgroundGradient,
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // App Header - same as home screen
-              AppHeader(title: 'Tasbeeh', showLocation: false),
+      backgroundColor: backgroundColor,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // App Header - same as home screen
+            AppHeader(title: 'Tasbeeh', showLocation: false),
 
-              const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-              // Dhikr dropdown selector with add button
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    // Add custom dhikr button
-                    GestureDetector(
-                      onTap: _showAddCustomDhikrDialog,
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00D9A5).withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFF00D9A5).withOpacity(0.5),
-                            width: 1,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.add,
-                          color: Color(0xFF00D9A5),
-                          size: 24,
+            // Dhikr dropdown selector with add button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  // Add custom dhikr button
+                  GestureDetector(
+                    onTap: _showAddCustomDhikrDialog,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: accentColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: accentColor.withOpacity(0.5),
+                          width: 1,
                         ),
                       ),
+                      child: Icon(Icons.add, color: accentColor, size: 24),
                     ),
-                    const SizedBox(width: 12),
-                    // Dropdown selector
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.2),
-                            width: 1,
-                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Dropdown selector
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: textColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: textColor.withOpacity(0.2),
+                          width: 1,
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<int>(
-                            value: _selectedDhikrIndex,
-                            isExpanded: true,
-                            dropdownColor: const Color(0xFF252836),
-                            icon: const Icon(
-                              Icons.keyboard_arrow_down,
-                              color: Color(0xFF00D9A5),
-                            ),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                            ),
-                            items: List.generate(_dhikrList.length, (index) {
-                              final item = _dhikrList[index];
-                              final target = item['target'] as int;
-                              final isCustom = item['isCustom'] == true;
-                              final savedCount =
-                                  _savedCounts[item['transliteration']] ?? 0;
-                              return DropdownMenuItem<int>(
-                                value: index,
-                                child: Row(
-                                  children: [
-                                    Expanded(
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<int>(
+                          value: _selectedDhikrIndex,
+                          isExpanded: true,
+                          dropdownColor: surfaceColor,
+                          icon: Icon(
+                            Icons.keyboard_arrow_down,
+                            color: accentColor,
+                          ),
+                          style: TextStyle(color: textColor, fontSize: 14),
+                          items: List.generate(_dhikrList.length, (index) {
+                            final item = _dhikrList[index];
+                            final target = item['target'] as int;
+                            final isCustom = item['isCustom'] == true;
+                            final savedCount =
+                                _savedCounts[item['transliteration']] ?? 0;
+                            return DropdownMenuItem<int>(
+                              value: index,
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item['transliteration'],
+                                      style: TextStyle(color: textColor),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (savedCount > 0)
+                                    Container(
+                                      margin: const EdgeInsets.only(left: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: accentColor,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
                                       child: Text(
-                                        item['transliteration'],
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                                        savedCount > 999
+                                            ? '999+'
+                                            : '$savedCount',
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? Colors.black
+                                              : Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    if (savedCount > 0)
-                                      Container(
-                                        margin: const EdgeInsets.only(left: 8),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF00D9A5),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    target <= 0 ? '∞' : '${target}x',
+                                    style: TextStyle(
+                                      color: accentColor,
+                                      fontSize: 12,
+                                      fontWeight: target <= 0
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                  if (isCustom)
+                                    GestureDetector(
+                                      onTap: () {
+                                        // Close dropdown first by navigating back
+                                        Navigator.of(context).pop();
+                                        // Then show delete dialog with captured index
+                                        Future.delayed(
+                                          const Duration(milliseconds: 100),
+                                          () => _showDeleteCustomDhikrDialog(
+                                            index,
                                           ),
+                                        );
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 8),
+                                        child: Icon(
+                                          Icons.delete_outline,
+                                          color: Colors.red,
+                                          size: 18,
                                         ),
-                                        child: Text(
-                                          savedCount > 999
-                                              ? '999+'
-                                              : '$savedCount',
-                                          style: const TextStyle(
-                                            color: Colors.black,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      target <= 0 ? '∞' : '${target}x',
-                                      style: TextStyle(
-                                        color: const Color(0xFF00D9A5),
-                                        fontSize: 12,
-                                        fontWeight: target <= 0
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
                                       ),
                                     ),
-                                    if (isCustom)
-                                      GestureDetector(
-                                        onTap: () {
-                                          // Close dropdown first by navigating back
-                                          Navigator.of(context).pop();
-                                          // Then show delete dialog with captured index
-                                          Future.delayed(
-                                            const Duration(milliseconds: 100),
-                                            () => _showDeleteCustomDhikrDialog(index),
-                                          );
-                                        },
-                                        child: const Padding(
-                                          padding: EdgeInsets.only(left: 8),
-                                          child: Icon(
-                                            Icons.delete_outline,
-                                            color: Colors.red,
-                                            size: 18,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              );
-                            }),
-                            onChanged: (index) {
-                              if (index != null) _selectDhikr(index);
-                            },
-                          ),
+                                ],
+                              ),
+                            );
+                          }),
+                          onChanged: (index) {
+                            if (index != null) _selectDhikr(index);
+                          },
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    // Sound toggle button
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _ttsEnabled = !_ttsEnabled;
-                        });
-                        _saveTtsPreference();
-                        if (_ttsEnabled) {
-                          _speakDhikr();
-                        }
-                      },
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: _ttsEnabled
-                              ? const Color(0xFF00D9A5).withOpacity(0.2)
-                              : Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
+                  ),
+                  const SizedBox(width: 12),
+                  // Sound toggle button
+                  GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _ttsEnabled = !_ttsEnabled;
+                      });
+                      _saveTtsPreference();
+                      if (_ttsEnabled) {
+                        _speakDhikr();
+                      }
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _ttsEnabled
+                            ? accentColor.withOpacity(0.2)
+                            : textColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        _ttsEnabled ? Icons.volume_up : Icons.volume_off,
+                        color: _ttsEnabled
+                            ? accentColor
+                            : textColor.withOpacity(0.5),
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const Spacer(),
+
+            // Arabic text
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                dhikr['arabic'],
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'serif',
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              dhikr['transliteration'],
+              style: TextStyle(
+                color: accentColor,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              dhikr['meaning'],
+              style: TextStyle(
+                color: textColor.withOpacity(0.7),
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+
+            const Spacer(),
+
+            // Counter circle - tap area
+            GestureDetector(
+              onTap: _increment,
+              child: ScaleTransition(
+                scale: _scaleAnimation,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Progress ring
+                    SizedBox(
+                      width: 220,
+                      height: 220,
+                      child: isUnlimited
+                          ? Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: accentColor.withOpacity(0.3),
+                                  width: 8,
+                                ),
+                              ),
+                            )
+                          : CircularProgressIndicator(
+                              value: progressPercent,
+                              strokeWidth: 8,
+                              backgroundColor: textColor.withOpacity(0.2),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                accentColor,
+                              ),
+                            ),
+                    ),
+                    // Counter
+                    Container(
+                      width: 180,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: textColor.withOpacity(0.1),
+                        border: Border.all(
+                          color: textColor.withOpacity(0.2),
+                          width: 2,
                         ),
-                        child: Icon(
-                          _ttsEnabled ? Icons.volume_up : Icons.volume_off,
-                          color: _ttsEnabled
-                              ? const Color(0xFF00D9A5)
-                              : Colors.white54,
-                          size: 24,
-                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '$_count',
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 64,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            isUnlimited ? '∞ unlimited' : 'of $_targetCount',
+                            style: TextStyle(
+                              color: textColor.withOpacity(0.6),
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
+            ),
 
-              const Spacer(),
+            const SizedBox(height: 16),
+            Text(
+              'Tap to count',
+              style: TextStyle(color: textColor.withOpacity(0.5), fontSize: 14),
+            ),
 
-              // Arabic text
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  dhikr['arabic'],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'serif',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                dhikr['transliteration'],
-                style: const TextStyle(
-                  color: Color(0xFF00D9A5),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                dhikr['meaning'],
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 14,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
+            const SizedBox(height: 24),
 
-              const Spacer(),
-
-              // Counter circle - tap area
-              GestureDetector(
-                onTap: _increment,
-                child: ScaleTransition(
-                  scale: _scaleAnimation,
-                  child: Stack(
-                    alignment: Alignment.center,
+            // Reset button and total count
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Total count
+                  Row(
                     children: [
-                      // Progress ring
-                      SizedBox(
-                        width: 220,
-                        height: 220,
-                        child: isUnlimited
-                            ? Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: const Color(
-                                      0xFF00D9A5,
-                                    ).withOpacity(0.3),
-                                    width: 8,
-                                  ),
-                                ),
-                              )
-                            : CircularProgressIndicator(
-                                value: progressPercent,
-                                strokeWidth: 8,
-                                backgroundColor: Colors.white.withOpacity(0.2),
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                  Color(0xFF00D9A5),
-                                ),
-                              ),
-                      ),
-                      // Counter
-                      Container(
-                        width: 180,
-                        height: 180,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.1),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.2),
-                            width: 2,
-                          ),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              '$_count',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 64,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              isUnlimited ? '∞ unlimited' : 'of $_targetCount',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
+                      Icon(Icons.all_inclusive, color: accentColor, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Total: $_totalCount',
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              Text(
-                'Tap to count',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 14,
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Reset button and total count
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Total count
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.all_inclusive,
-                          color: Color(0xFF00D9A5),
-                          size: 16,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Total: $_totalCount',
-                          style: const TextStyle(
-                            color: Color(0xFF00D9A5),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(width: 24),
-                    // Reset button
-                    ElevatedButton.icon(
-                      onPressed: _reset,
-                      icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('Reset'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white.withOpacity(0.1),
-                        foregroundColor: Colors.white70,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            color: Colors.white.withOpacity(0.2),
-                          ),
-                        ),
+                  const SizedBox(width: 24),
+                  // Reset button
+                  ElevatedButton.icon(
+                    onPressed: _reset,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Reset'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: textColor.withOpacity(0.1),
+                      foregroundColor: textColor.withOpacity(0.7),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(color: textColor.withOpacity(0.2)),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
+            ),
 
-              const Spacer(),
-            ],
-          ),
+            const Spacer(),
+          ],
         ),
       ),
     );

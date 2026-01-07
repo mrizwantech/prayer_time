@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../core/time_format_settings.dart';
 import '../core/calculation_method_settings.dart';
 import '../core/prayer_time_service.dart';
+import '../core/app_theme_settings.dart';
 import 'notification_settings_screen.dart';
 import 'adhan_settings_screen.dart';
 import 'calculation_method_screen.dart';
@@ -16,6 +17,7 @@ class SettingsScreen extends StatelessWidget {
     final timeFormatSettings = Provider.of<TimeFormatSettings>(context);
     final prayerService = Provider.of<PrayerTimeService>(context);
     final calculationMethodSettings = Provider.of<CalculationMethodSettings>(context);
+    final themeSettings = Provider.of<AppThemeSettings>(context);
     
     return Scaffold(
       body: SafeArea(
@@ -138,11 +140,123 @@ class SettingsScreen extends StatelessWidget {
                     onChanged: (val) => timeFormatSettings.setFormat(val),
                     subtitle: Text(timeFormatSettings.is24Hour ? '24-hour' : '12-hour'),
                   ),
+                  Divider(),
+                  
+                  // Theme Mode
+                  ListTile(
+                    leading: Icon(themeSettings.themeModeIcon, color: Colors.deepPurple),
+                    title: const Text('App Theme'),
+                    subtitle: Text(themeSettings.themeModeDisplayName),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: () => _showThemePicker(context, themeSettings),
+                  ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+  
+  void _showThemePicker(BuildContext context, AppThemeSettings themeSettings) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.palette, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 12),
+                Text(
+                  'Select Theme',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildThemeOption(
+              context,
+              themeSettings,
+              AppThemeMode.light,
+              Icons.light_mode,
+              'Light',
+              'Bright theme for daytime use',
+            ),
+            _buildThemeOption(
+              context,
+              themeSettings,
+              AppThemeMode.dark,
+              Icons.dark_mode,
+              'Dark',
+              'Dark theme for nighttime use',
+            ),
+            _buildThemeOption(
+              context,
+              themeSettings,
+              AppThemeMode.system,
+              Icons.brightness_auto,
+              'System',
+              'Follow device settings',
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildThemeOption(
+    BuildContext context,
+    AppThemeSettings themeSettings,
+    AppThemeMode mode,
+    IconData icon,
+    String title,
+    String subtitle,
+  ) {
+    final isSelected = themeSettings.themeMode == mode;
+    final accentColor = Theme.of(context).colorScheme.primary;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected ? accentColor.withOpacity(0.15) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? accentColor : Colors.transparent,
+          width: 1,
+        ),
+      ),
+      child: ListTile(
+        leading: Icon(
+          icon,
+          color: isSelected ? accentColor : Theme.of(context).iconTheme.color?.withOpacity(0.6),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: isSelected ? accentColor : null,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        subtitle: Text(subtitle),
+        trailing: isSelected
+            ? Icon(Icons.check_circle, color: accentColor)
+            : null,
+        onTap: () {
+          themeSettings.setThemeMode(mode);
+          Navigator.pop(context);
+        },
       ),
     );
   }

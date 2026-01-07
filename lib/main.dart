@@ -14,6 +14,7 @@ import 'core/calculation_method_settings.dart';
 import 'core/adhan_notification_service.dart';
 import 'core/permission_manager.dart';
 import 'core/prayer_time_service.dart';
+import 'core/app_theme_settings.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 // Global navigator key for navigation from anywhere
@@ -22,27 +23,32 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
-  
+
   // Initialize timezone database for notifications
   tz.initializeTimeZones();
-  
+
   // Initialize notification service and check for notification launch
   final notificationService = AdhanNotificationService();
   await notificationService.initialize();
-  
+
   // Check if app was launched by tapping a notification
-  final notificationAppLaunchDetails = await notificationService.getNotificationAppLaunchDetails();
+  final notificationAppLaunchDetails = await notificationService
+      .getNotificationAppLaunchDetails();
   String? initialPrayerName;
-  
+
   debugPrint('=== CHECKING NOTIFICATION LAUNCH ===');
-  debugPrint('Did notification launch app: ${notificationAppLaunchDetails?.didNotificationLaunchApp}');
-  debugPrint('Notification response: ${notificationAppLaunchDetails?.notificationResponse}');
-  
+  debugPrint(
+    'Did notification launch app: ${notificationAppLaunchDetails?.didNotificationLaunchApp}',
+  );
+  debugPrint(
+    'Notification response: ${notificationAppLaunchDetails?.notificationResponse}',
+  );
+
   if (notificationAppLaunchDetails?.didNotificationLaunchApp ?? false) {
     debugPrint('✅ App WAS launched from notification!');
     final payload = notificationAppLaunchDetails?.notificationResponse?.payload;
     debugPrint('Notification payload: $payload');
-    
+
     // Extract prayer name from payload
     if (payload != null && payload.isNotEmpty) {
       final parts = payload.split('|');
@@ -56,16 +62,20 @@ void main() async {
   } else {
     debugPrint('ℹ️ App was NOT launched from notification (normal launch)');
   }
-  
+
   // Initialize calculation method settings
   final calculationMethodSettings = CalculationMethodSettings();
   await calculationMethodSettings.initialize();
   final isFirstTimeSetup = !calculationMethodSettings.hasSelectedMethod;
-  
+
+  // Initialize theme settings
+  final appThemeSettings = AppThemeSettings();
+  await appThemeSettings.initialize();
+
   // Create PrayerTimeService (single source of truth)
   final prayerTimeService = PrayerTimeService();
   prayerTimeService.setCalculationMethodSettings(calculationMethodSettings);
-  
+
   runApp(
     EasyLocalization(
       supportedLocales: const [Locale('en'), Locale('ar')],
@@ -76,6 +86,7 @@ void main() async {
           ChangeNotifierProvider(create: (_) => TimeFormatSettings()),
           ChangeNotifierProvider.value(value: calculationMethodSettings),
           ChangeNotifierProvider.value(value: prayerTimeService),
+          ChangeNotifierProvider.value(value: appThemeSettings),
         ],
         child: MyApp(
           initialPrayerName: initialPrayerName,
@@ -89,9 +100,9 @@ void main() async {
 class MyApp extends StatefulWidget {
   final String? initialPrayerName;
   final bool isFirstTimeSetup;
-  
+
   const MyApp({
-    super.key, 
+    super.key,
     this.initialPrayerName,
     this.isFirstTimeSetup = false,
   });
@@ -104,10 +115,12 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    
+
     // Auto-launch adhan player if app was opened from notification
     if (widget.initialPrayerName != null) {
-      debugPrint('🎵 App launched from notification for ${widget.initialPrayerName}');
+      debugPrint(
+        '🎵 App launched from notification for ${widget.initialPrayerName}',
+      );
       WidgetsBinding.instance.addPostFrameCallback((_) {
         debugPrint('📱 Auto-launching adhan player screen');
         navigatorKey.currentState?.pushNamed(
@@ -120,21 +133,25 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    final themeSettings = Provider.of<AppThemeSettings>(context);
+
     return MaterialApp(
       navigatorKey: navigatorKey,
       title: 'Islamic Prayer Times',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      darkTheme: AppThemeSettings.darkTheme,
+      theme: AppThemeSettings.lightTheme,
+      themeMode: themeSettings.flutterThemeMode,
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
       locale: context.locale,
       initialRoute: '/',
       routes: {
-        '/': (context) => AppStartupScreen(isFirstTimeSetup: widget.isFirstTimeSetup),
+        '/': (context) =>
+            AppStartupScreen(isFirstTimeSetup: widget.isFirstTimeSetup),
         '/adhan-player': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+          final args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
           return AdhanPlayerScreen(prayerName: args['prayerName']);
         },
       },
@@ -145,7 +162,7 @@ class _MyAppState extends State<MyApp> {
 /// Startup screen that handles initialization flow
 class AppStartupScreen extends StatefulWidget {
   final bool isFirstTimeSetup;
-  
+
   const AppStartupScreen({super.key, required this.isFirstTimeSetup});
 
   @override
@@ -171,21 +188,26 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
         _showCalculationMethod = true;
         _isLoading = false;
       });
-      
+
       // Listen for when method is selected
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _settings = Provider.of<CalculationMethodSettings>(context, listen: false);
+        _settings = Provider.of<CalculationMethodSettings>(
+          context,
+          listen: false,
+        );
         _settings?.addListener(_onMethodSelected);
       });
       return;
     }
-    
+
     // Otherwise, proceed with initialization
     await _loadEverything();
   }
 
   void _onMethodSelected() {
-    if (_settings != null && _settings!.hasSelectedMethod && _showCalculationMethod) {
+    if (_settings != null &&
+        _settings!.hasSelectedMethod &&
+        _showCalculationMethod) {
       setState(() {
         _showCalculationMethod = false;
         _isLoading = true;
@@ -201,18 +223,21 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
       setState(() {
         _statusMessage = 'Requesting permissions...';
       });
-      
+
       final permissionManager = PermissionManager();
       await permissionManager.requestAllPermissions();
-      
+
       // Step 2: Initialize PrayerTimeService (location + prayer times + notifications)
       setState(() {
         _statusMessage = 'Getting prayer times...';
       });
-      
-      final prayerTimeService = Provider.of<PrayerTimeService>(context, listen: false);
+
+      final prayerTimeService = Provider.of<PrayerTimeService>(
+        context,
+        listen: false,
+      );
       await prayerTimeService.initialize();
-      
+
       // Step 3: Done - navigate to main screen
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -238,14 +263,17 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accentColor = theme.colorScheme.primary;
+
     // Show calculation method screen if needed
     if (_showCalculationMethod) {
       return CalculationMethodScreen(isFirstTime: true);
     }
-    
+
     // Show loading screen
     return Scaffold(
-      backgroundColor: const Color(0xFF1a1a2e),
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -255,37 +283,37 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
               width: 100,
               height: 100,
               decoration: BoxDecoration(
-                color: const Color(0xFF00BFA6),
+                color: accentColor,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.mosque,
                 size: 60,
-                color: Colors.white,
+                color: theme.brightness == Brightness.dark
+                    ? Colors.black
+                    : Colors.white,
               ),
             ),
             const SizedBox(height: 30),
             // App name
-            const Text(
+            Text(
               'Azanify',
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: theme.colorScheme.onSurface,
               ),
             ),
             const SizedBox(height: 40),
             // Loading indicator
-            const CircularProgressIndicator(
-              color: Color(0xFF00BFA6),
-            ),
+            CircularProgressIndicator(color: accentColor),
             const SizedBox(height: 20),
             // Status message
             Text(
               _statusMessage,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
-                color: Colors.white70,
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
               ),
             ),
           ],
@@ -312,10 +340,8 @@ class _FirstTimeSetupWrapperState extends State<FirstTimeSetupWrapper> {
     if (_setupComplete) {
       return const MainNavigation();
     }
-    
-    return CalculationMethodScreen(
-      isFirstTime: true,
-    );
+
+    return CalculationMethodScreen(isFirstTime: true);
   }
 
   @override
@@ -323,7 +349,10 @@ class _FirstTimeSetupWrapperState extends State<FirstTimeSetupWrapper> {
     super.initState();
     // Listen for when the calculation method is selected
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _settings = Provider.of<CalculationMethodSettings>(context, listen: false);
+      _settings = Provider.of<CalculationMethodSettings>(
+        context,
+        listen: false,
+      );
       _settings?.addListener(_onMethodSelected);
       // Check if already selected (in case of hot reload)
       _onMethodSelected();
@@ -373,18 +402,18 @@ class _MainNavigationState extends State<MainNavigation> {
 
   Future<void> _requestAllPermissions() async {
     final permissionManager = PermissionManager();
-    
+
     // Request all permissions at once
     final allGranted = await permissionManager.requestAllPermissions();
-    
+
     if (allGranted) {
       debugPrint('All permissions granted!');
       // Note: Prayer notifications are already scheduled by PrayerTimeService
       // during initialization, so we don't need to schedule them again here.
-      
+
       // Show overlay permission prompt first (most important for auto-launch)
       await _checkOverlayPermission();
-      
+
       // Then show battery optimization prompt
       _checkBatteryOptimization();
     } else {
@@ -397,7 +426,11 @@ class _MainNavigationState extends State<MainNavigation> {
           builder: (context) => AlertDialog(
             title: Row(
               children: [
-                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange,
+                  size: 28,
+                ),
                 SizedBox(width: 8),
                 Expanded(child: Text('Permissions Required')),
               ],
@@ -411,13 +444,29 @@ class _MainNavigationState extends State<MainNavigation> {
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
                 ),
                 SizedBox(height: 16),
-                _buildPermissionItem(Icons.notifications, 'Notifications', 'To alert you at prayer times'),
-                _buildPermissionItem(Icons.location_on, 'Location', 'To calculate accurate prayer times for your area'),
-                _buildPermissionItem(Icons.alarm, 'Exact Alarms', 'To notify you at the precise prayer time'),
+                _buildPermissionItem(
+                  Icons.notifications,
+                  'Notifications',
+                  'To alert you at prayer times',
+                ),
+                _buildPermissionItem(
+                  Icons.location_on,
+                  'Location',
+                  'To calculate accurate prayer times for your area',
+                ),
+                _buildPermissionItem(
+                  Icons.alarm,
+                  'Exact Alarms',
+                  'To notify you at the precise prayer time',
+                ),
                 SizedBox(height: 16),
                 Text(
                   'Without these permissions, you will not receive prayer time notifications.',
-                  style: TextStyle(fontSize: 13, color: Colors.red.shade700, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.red.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -443,12 +492,12 @@ class _MainNavigationState extends State<MainNavigation> {
       }
     }
   }
-  
+
   Future<void> _checkOverlayPermission() async {
     try {
       const platform = MethodChannel('com.mrizwantech.azanify/battery');
       final canDrawOverlays = await platform.invokeMethod('canDrawOverlays');
-      
+
       if (!canDrawOverlays && mounted) {
         await showDialog(
           context: context,
@@ -505,8 +554,10 @@ class _MainNavigationState extends State<MainNavigation> {
   Future<void> _checkBatteryOptimization() async {
     try {
       const platform = MethodChannel('com.mrizwantech.azanify/battery');
-      final isUnrestricted = await platform.invokeMethod('isIgnoringBatteryOptimizations');
-      
+      final isUnrestricted = await platform.invokeMethod(
+        'isIgnoringBatteryOptimizations',
+      );
+
       if (!isUnrestricted && mounted) {
         // Show dialog asking user to disable battery optimization
         Future.delayed(Duration(seconds: 1), () {
@@ -534,7 +585,9 @@ class _MainNavigationState extends State<MainNavigation> {
                 ElevatedButton(
                   onPressed: () async {
                     Navigator.pop(context);
-                    await platform.invokeMethod('requestIgnoreBatteryOptimizations');
+                    await platform.invokeMethod(
+                      'requestIgnoreBatteryOptimizations',
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
@@ -551,7 +604,7 @@ class _MainNavigationState extends State<MainNavigation> {
       debugPrint('Error checking battery optimization: $e');
     }
   }
-  
+
   Widget _buildPermissionItem(IconData icon, String title, String description) {
     return Padding(
       padding: EdgeInsets.only(bottom: 12),
@@ -564,8 +617,14 @@ class _MainNavigationState extends State<MainNavigation> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                Text(description, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                Text(
+                  title,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                ),
               ],
             ),
           ),
@@ -582,28 +641,24 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       body: screens[selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: selectedIndex,
         onTap: onItemTapped,
-        selectedItemColor: Colors.deepPurple,
-        unselectedItemColor: Colors.grey,
+        selectedItemColor: theme.colorScheme.primary,
+        unselectedItemColor: theme.colorScheme.onSurface.withOpacity(0.5),
         type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
+        backgroundColor: theme.colorScheme.surface,
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(
             icon: Icon(Icons.radio_button_checked),
             label: 'Tasbeeh',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.explore),
-            label: 'Qibla',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
           BottomNavigationBarItem(
             icon: Icon(Icons.track_changes),
             label: 'Tracker',

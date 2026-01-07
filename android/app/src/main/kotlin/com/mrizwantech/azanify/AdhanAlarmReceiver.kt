@@ -11,16 +11,30 @@ class AdhanAlarmReceiver : BroadcastReceiver() {
         Log.d("AdhanAlarmReceiver", "🔔 Alarm received!")
         
         val prayerName = intent.getStringExtra("prayerName") ?: "Prayer"
-        val soundFile = intent.getStringExtra("soundFile") ?: "azan1"
+        val soundFile = intent.getStringExtra("soundFile") ?: "fajr"
         val isIsha = intent.getBooleanExtra("isIsha", false)
         
         Log.d("AdhanAlarmReceiver", "Prayer: $prayerName, Sound: $soundFile, isIsha: $isIsha")
+        
+        // Get saved adhan volume from Flutter SharedPreferences
+        // Flutter stores doubles as strings in SharedPreferences
+        val flutterPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val volume = try {
+            // Try reading as float first (in case it was set natively)
+            flutterPrefs.getFloat("flutter.adhan_volume", 1.0f)
+        } catch (e: ClassCastException) {
+            // Flutter stores doubles as strings, so parse it
+            val volumeStr = flutterPrefs.getString("flutter.adhan_volume", "1.0")
+            volumeStr?.toFloatOrNull() ?: 1.0f
+        }
+        Log.d("AdhanAlarmReceiver", "Adhan volume: $volume")
         
         // Start the adhan service - it will play sound AND launch the activity
         val serviceIntent = Intent(context, AdhanService::class.java).apply {
             action = AdhanService.ACTION_PLAY
             putExtra(AdhanService.EXTRA_PRAYER_NAME, prayerName)
             putExtra(AdhanService.EXTRA_SOUND_FILE, soundFile)
+            putExtra(AdhanService.EXTRA_VOLUME, volume)
         }
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

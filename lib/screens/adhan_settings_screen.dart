@@ -9,7 +9,7 @@ import '../presentation/widgets/app_header.dart';
 
 class AdhanSettingsScreen extends StatefulWidget {
   final Map<String, DateTime>? prayerTimes;
-  
+
   const AdhanSettingsScreen({super.key, this.prayerTimes});
 
   @override
@@ -18,15 +18,16 @@ class AdhanSettingsScreen extends StatefulWidget {
 
 class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
   final _soundService = AdhanSoundService();
-  
+
   String _selectedAdhan = 'Silent';
   List<String> _availableAdhans = ['Silent'];
   bool _loading = true;
   String? _currentlyPreviewing;
-  
+  double _adhanVolume = 1.0;
+
   // Prayer settings
   List<PrayerNotificationSetting> _prayerSettings = [];
-  
+
   // Theme colors matching the app's dark theme
   static const _backgroundColor = Color(0xFF1a1d2e);
   static const _cardColor = Color(0xFF252836);
@@ -43,8 +44,10 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final adhan = await _soundService.getSelectedAdhan();
-    final adhans = await _soundService.getAvailableAdhans();
-    
+    // Exclude 'fajr' from selection - it's reserved for Fajr prayer only
+    final adhans = await _soundService.getAvailableAdhans(excludeFajr: true);
+    final volume = await _soundService.getAdhanVolume();
+
     // Use prayer times passed from parent or defaults
     Map<String, DateTime> prayerTimes;
     if (widget.prayerTimes != null && widget.prayerTimes!.isNotEmpty) {
@@ -61,17 +64,18 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
         'Isha': DateTime(now.year, now.month, now.day, 21, 30),
       };
     }
-    
+
     // Load saved settings for each prayer
     List<PrayerNotificationSetting> settings = [];
     for (var entry in prayerTimes.entries) {
       final prayerName = entry.key;
       final prayerTime = entry.value;
-      
+
       // Load enabled state
-      final isEnabled = prefs.getBool('prayer_enabled_$prayerName') ?? 
+      final isEnabled =
+          prefs.getBool('prayer_enabled_$prayerName') ??
           (prayerName != 'Sunrise'); // Sunrise off by default
-      
+
       // Load selected days (default all days)
       final savedDays = prefs.getStringList('prayer_days_$prayerName');
       List<bool> days;
@@ -80,29 +84,32 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
       } else {
         days = List.filled(7, true);
       }
-      
+
       // Load offset minutes (how many minutes before prayer time)
       final offsetMinutes = prefs.getInt('prayer_offset_$prayerName') ?? 0;
-      
-      settings.add(PrayerNotificationSetting(
-        name: prayerName,
-        time: prayerTime,
-        isEnabled: isEnabled,
-        selectedDays: days,
-        offsetMinutes: offsetMinutes,
-      ));
+
+      settings.add(
+        PrayerNotificationSetting(
+          name: prayerName,
+          time: prayerTime,
+          isEnabled: isEnabled,
+          selectedDays: days,
+          offsetMinutes: offsetMinutes,
+        ),
+      );
     }
-    
+
     if (mounted) {
       setState(() {
         _selectedAdhan = adhan;
         _availableAdhans = adhans;
+        _adhanVolume = volume;
         _prayerSettings = settings;
         _loading = false;
       });
     }
   }
-  
+
   Future<void> _savePrayerSetting(PrayerNotificationSetting setting) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('prayer_enabled_${setting.name}', setting.isEnabled);
@@ -111,7 +118,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
       setting.selectedDays.map((d) => d.toString()).toList(),
     );
     await prefs.setInt('prayer_offset_${setting.name}', setting.offsetMinutes);
-    
+
     // Update notification service
     await _soundService.setSoundEnabled(setting.name, setting.isEnabled);
   }
@@ -128,7 +135,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
     final minute = time.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
   }
-  
+
   String _formatPeriod(DateTime time) {
     return time.hour >= 12 ? 'PM' : 'AM';
   }
@@ -156,17 +163,21 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: _cardColor,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => _buildAdhanPicker(),
     );
   }
-  
+
   Widget _buildAdhanPicker() {
     return StatefulBuilder(
       builder: (context, setModalState) => Container(
         padding: const EdgeInsets.all(20),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,59 +197,75 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            ..._availableAdhans.map((adhan) {
-              final isSelected = _selectedAdhan == adhan;
-              final isPreviewing = _currentlyPreviewing == adhan;
-              
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: isSelected ? _accentColor.withOpacity(0.15) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isSelected ? _accentColor : Colors.transparent,
-                    width: 1,
-                  ),
-                ),
-                child: ListTile(
-                  leading: FaIcon(
-                    adhan == 'Silent' ? FontAwesomeIcons.volumeXmark : FontAwesomeIcons.volumeHigh,
-                    color: isSelected ? _accentColor : _subtitleColor,
-                    size: 18,
-                  ),
-                  title: Text(
-                    _formatAdhanName(adhan),
-                    style: TextStyle(
-                      color: isSelected ? _accentColor : _textColor,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _availableAdhans.length,
+                itemBuilder: (context, index) {
+                  final adhan = _availableAdhans[index];
+                  final isSelected = _selectedAdhan == adhan;
+                  final isPreviewing = _currentlyPreviewing == adhan;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? _accentColor.withOpacity(0.15)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected ? _accentColor : Colors.transparent,
+                        width: 1,
+                      ),
                     ),
-                  ),
-                  trailing: adhan != 'Silent'
-                      ? IconButton(
-                          icon: FaIcon(
-                            isPreviewing ? FontAwesomeIcons.stop : FontAwesomeIcons.play,
-                            color: _accentColor,
-                            size: 16,
-                          ),
-                          onPressed: () async {
-                            await _togglePreview(adhan);
-                            setModalState(() {});
-                            setState(() {});
-                          },
-                        )
-                      : null,
-                  onTap: () async {
-                    await _soundService.setSelectedAdhan(adhan);
-                    await _soundService.stopPreview();
-                    setState(() {
-                      _selectedAdhan = adhan;
-                      _currentlyPreviewing = null;
-                    });
-                    Navigator.pop(context);
-                  },
-                ),
-              );
-            }).toList(),
+                    child: ListTile(
+                      leading: FaIcon(
+                        adhan == 'Silent'
+                            ? FontAwesomeIcons.volumeXmark
+                            : FontAwesomeIcons.volumeHigh,
+                        color: isSelected ? _accentColor : _subtitleColor,
+                        size: 18,
+                      ),
+                      title: Text(
+                        _formatAdhanName(adhan),
+                        style: TextStyle(
+                          color: isSelected ? _accentColor : _textColor,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: adhan != 'Silent'
+                          ? IconButton(
+                              icon: FaIcon(
+                                isPreviewing
+                                    ? FontAwesomeIcons.stop
+                                    : FontAwesomeIcons.play,
+                                color: _accentColor,
+                                size: 16,
+                              ),
+                              onPressed: () async {
+                                await _togglePreview(adhan);
+                                setModalState(() {});
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      onTap: () async {
+                        await _soundService.setSelectedAdhan(adhan);
+                        await _soundService.stopPreview();
+                        setState(() {
+                          _selectedAdhan = adhan;
+                          _currentlyPreviewing = null;
+                        });
+                        Navigator.pop(context);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -247,9 +274,12 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
 
   String _formatAdhanName(String name) {
     if (name == 'Silent') return name;
-    return name.split('_').map((word) {
-      return word[0].toUpperCase() + word.substring(1);
-    }).join(' ');
+    return name
+        .split('_')
+        .map((word) {
+          return word[0].toUpperCase() + word.substring(1);
+        })
+        .join(' ');
   }
 
   Future<void> _togglePreview(String adhan) async {
@@ -264,7 +294,9 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not play ${_formatAdhanName(adhan)}')),
+            SnackBar(
+              content: Text('Could not play ${_formatAdhanName(adhan)}'),
+            ),
           );
         }
       }
@@ -283,8 +315,16 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
   }
 
   Widget _buildDayPicker(PrayerNotificationSetting setting, int index) {
-    final dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
+    final dayNames = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
+
     return StatefulBuilder(
       builder: (context, setModalState) => SingleChildScrollView(
         child: Container(
@@ -295,7 +335,11 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
             children: [
               Row(
                 children: [
-                  FaIcon(FontAwesomeIcons.calendarDays, color: _accentColor, size: 20),
+                  FaIcon(
+                    FontAwesomeIcons.calendarDays,
+                    color: _accentColor,
+                    size: 20,
+                  ),
                   const SizedBox(width: 12),
                   Text(
                     '${setting.name} - Select Days',
@@ -348,7 +392,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
 
   Widget _buildOffsetPicker(PrayerNotificationSetting setting, int index) {
     final offsets = [0, 5, 10, 15, 20, 30, 45, 60];
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -377,14 +421,16 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
           const SizedBox(height: 20),
           ...offsets.map((offset) {
             final isSelected = setting.offsetMinutes == offset;
-            String label = offset == 0 
-                ? 'At prayer time' 
+            String label = offset == 0
+                ? 'At prayer time'
                 : '$offset minutes before';
-            
+
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
-                color: isSelected ? _accentColor.withOpacity(0.15) : Colors.transparent,
+                color: isSelected
+                    ? _accentColor.withOpacity(0.15)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isSelected ? _accentColor : Colors.transparent,
@@ -395,11 +441,17 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                   label,
                   style: TextStyle(
                     color: isSelected ? _accentColor : _textColor,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.bold
+                        : FontWeight.normal,
                   ),
                 ),
-                trailing: isSelected 
-                    ? FaIcon(FontAwesomeIcons.check, color: _accentColor, size: 16)
+                trailing: isSelected
+                    ? FaIcon(
+                        FontAwesomeIcons.check,
+                        color: _accentColor,
+                        size: 16,
+                      )
                     : null,
                 onTap: () {
                   setState(() {
@@ -420,7 +472,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final prayerService = Provider.of<PrayerTimeService>(context);
-    
+
     if (_loading) {
       return Scaffold(
         backgroundColor: _backgroundColor,
@@ -462,7 +514,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                 children: [
                   // Current Adhan Selection Card
                   Container(
-                    margin: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: _cardColor,
@@ -479,50 +531,129 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: FaIcon(
-                              _selectedAdhan == 'Silent' 
-                                  ? FontAwesomeIcons.volumeXmark 
+                              _selectedAdhan == 'Silent'
+                                  ? FontAwesomeIcons.volumeXmark
                                   : FontAwesomeIcons.volumeHigh,
                               color: _accentColor,
                               size: 20,
                             ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Adhan Sound',
+                                  style: TextStyle(
+                                    color: _subtitleColor,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _formatAdhanName(_selectedAdhan),
+                                  style: TextStyle(
+                                    color: _textColor,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          FaIcon(
+                            FontAwesomeIcons.chevronRight,
+                            color: _subtitleColor,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
+
+                  // Volume Control Card
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _cardColor,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Adhan Sound',
-                          style: TextStyle(color: _subtitleColor, fontSize: 13),
+                        Row(
+                          children: [
+                            FaIcon(
+                              _adhanVolume == 0
+                                  ? FontAwesomeIcons.volumeOff
+                                  : _adhanVolume < 0.5
+                                  ? FontAwesomeIcons.volumeLow
+                                  : FontAwesomeIcons.volumeHigh,
+                              color: _accentColor,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Adhan Volume',
+                              style: TextStyle(
+                                color: _subtitleColor,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${(_adhanVolume * 100).toInt()}%',
+                              style: TextStyle(
+                                color: _accentColor,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatAdhanName(_selectedAdhan),
-                          style: TextStyle(
-                            color: _textColor,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                        const SizedBox(height: 8),
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: _accentColor,
+                            inactiveTrackColor: _accentColor.withOpacity(0.2),
+                            thumbColor: _accentColor,
+                            overlayColor: _accentColor.withOpacity(0.2),
+                            trackHeight: 4,
                           ),
+                          child: Slider(
+                            value: _adhanVolume,
+                            min: 0.0,
+                            max: 1.0,
+                            onChanged: (value) {
+                              setState(() {
+                                _adhanVolume = value;
+                              });
+                            },
+                            onChangeEnd: (value) async {
+                              await _soundService.setAdhanVolume(value);
+                            },
+                          ),
+                        ),
+                        Text(
+                          'Controls adhan volume independently of device volume',
+                          style: TextStyle(color: _subtitleColor, fontSize: 11),
                         ),
                       ],
                     ),
                   ),
-                  FaIcon(FontAwesomeIcons.chevronRight, color: _subtitleColor, size: 14),
-                ],
-              ),
-            ),
-          ),
-          
-          // Prayer List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _prayerSettings.length,
-              itemBuilder: (context, index) {
-                return _buildPrayerCard(_prayerSettings[index], index);
-              },
-            ),
-          ),
+
+                  // Prayer List
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _prayerSettings.length,
+                      itemBuilder: (context, index) {
+                        return _buildPrayerCard(_prayerSettings[index], index);
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -549,10 +680,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
             children: [
               Text(
                 setting.name,
-                style: TextStyle(
-                  color: _subtitleColor,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: _subtitleColor, fontSize: 13),
               ),
               const SizedBox(height: 4),
               Row(
@@ -571,27 +699,24 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                     padding: const EdgeInsets.only(left: 4, bottom: 2),
                     child: Text(
                       _formatPeriod(setting.time),
-                      style: TextStyle(
-                        color: _subtitleColor,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: _subtitleColor, fontSize: 12),
                     ),
                   ),
                 ],
               ),
             ],
           ),
-          
+
           const Spacer(),
-          
+
           // Day selector
           GestureDetector(
             onTap: () => _showDayPicker(setting, index),
             child: _buildDaySelector(setting),
           ),
-          
+
           const SizedBox(width: 16),
-          
+
           // Bell icon
           GestureDetector(
             onTap: () {
@@ -602,7 +727,9 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
               _savePrayerSetting(setting);
             },
             child: FaIcon(
-              setting.isEnabled ? FontAwesomeIcons.solidBell : FontAwesomeIcons.bellSlash,
+              setting.isEnabled
+                  ? FontAwesomeIcons.solidBell
+                  : FontAwesomeIcons.bellSlash,
               color: setting.isEnabled ? _accentColor : _subtitleColor,
               size: 20,
             ),
@@ -615,20 +742,20 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
   Widget _buildDaySelector(PrayerNotificationSetting setting) {
     final days = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
     final today = DateTime.now().weekday % 7;
-    
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(7, (index) {
         final isSelected = setting.selectedDays[index];
         final isToday = index == today;
-        
+
         return Container(
           width: 18,
           height: 18,
           margin: const EdgeInsets.symmetric(horizontal: 1),
           decoration: BoxDecoration(
-            color: isSelected && setting.isEnabled 
-                ? _accentColor.withOpacity(0.2) 
+            color: isSelected && setting.isEnabled
+                ? _accentColor.withOpacity(0.2)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
           ),
@@ -656,7 +783,7 @@ class PrayerNotificationSetting {
   bool isEnabled;
   List<bool> selectedDays;
   int offsetMinutes;
-  
+
   PrayerNotificationSetting({
     required this.name,
     required this.time,

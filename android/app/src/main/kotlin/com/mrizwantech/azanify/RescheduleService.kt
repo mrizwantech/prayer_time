@@ -95,7 +95,7 @@ class RescheduleService : Service() {
         Log.d(TAG, "   Isha: ${prayerTimes.isha}")
         
         // Get the selected adhan sound
-        val soundFile = prefs.getString("flutter.selected_adhan", "azan1") ?: "azan1"
+        val soundFile = prefs.getString("flutter.selected_adhan", "fajr") ?: "fajr"
         
         // Schedule alarms for tomorrow's prayers
         // Use IDs 200-204 for tomorrow to avoid conflicts with today's (100-104)

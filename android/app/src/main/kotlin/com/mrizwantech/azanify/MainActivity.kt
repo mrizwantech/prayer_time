@@ -64,9 +64,10 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "playAdhan" -> {
                     val prayerName = call.argument<String>("prayerName") ?: "Prayer"
-                    val soundFile = call.argument<String>("soundFile") ?: "azan1"
-                    Log.d("MainActivity", "playAdhan: prayerName=$prayerName, soundFile=$soundFile")
-                    playAdhan(prayerName, soundFile)
+                    val soundFile = call.argument<String>("soundFile") ?: "fajr"
+                    val volume = call.argument<Double>("volume") ?: 1.0
+                    Log.d("MainActivity", "playAdhan: prayerName=$prayerName, soundFile=$soundFile, volume=$volume")
+                    playAdhan(prayerName, soundFile, volume.toFloat())
                     result.success(null)
                 }
                 "stopAdhan" -> {
@@ -94,7 +95,7 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "scheduleAdhanAlarm" -> {
                     val prayerName = call.argument<String>("prayerName") ?: "Prayer"
-                    val soundFile = call.argument<String>("soundFile") ?: "azan1"
+                    val soundFile = call.argument<String>("soundFile") ?: "fajr"
                     val triggerTime = call.argument<Long>("triggerTime") ?: 0L
                     val requestCode = call.argument<Int>("requestCode") ?: 0
                     val isIsha = call.argument<Boolean>("isIsha") ?: false
@@ -189,11 +190,12 @@ class MainActivity : FlutterActivity() {
         Log.d("MainActivity", "Adhan alarm scheduled for $prayerName at $triggerTime (requestCode: $requestCode, isIsha: $isIsha)")
     }
 
-    private fun playAdhan(prayerName: String, soundFile: String) {
+    private fun playAdhan(prayerName: String, soundFile: String, volume: Float = 1.0f) {
         val intent = Intent(this, AdhanService::class.java).apply {
             action = AdhanService.ACTION_PLAY
             putExtra(AdhanService.EXTRA_PRAYER_NAME, prayerName)
             putExtra(AdhanService.EXTRA_SOUND_FILE, soundFile)
+            putExtra(AdhanService.EXTRA_VOLUME, volume)
         }
         startService(intent)
     }
