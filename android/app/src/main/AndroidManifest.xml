@@ -61,6 +61,12 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
         
+        <!-- Reschedule service for scheduling next day's prayers after Isha -->
+        <service
+            android:name=".RescheduleService"
+            android:enabled="true"
+            android:exported="false" />
+        
         <!-- Adhan alarm receiver for auto-launching prayer screen -->
         <receiver
             android:name=".AdhanAlarmReceiver"

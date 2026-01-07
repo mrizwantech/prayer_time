@@ -97,12 +97,37 @@ class MainActivity : FlutterActivity() {
                     val soundFile = call.argument<String>("soundFile") ?: "azan1"
                     val triggerTime = call.argument<Long>("triggerTime") ?: 0L
                     val requestCode = call.argument<Int>("requestCode") ?: 0
+                    val isIsha = call.argument<Boolean>("isIsha") ?: false
                     
-                    Log.d("MainActivity", "Scheduling adhan alarm for $prayerName at $triggerTime")
-                    scheduleAdhanAlarm(prayerName, soundFile, triggerTime, requestCode)
+                    Log.d("MainActivity", "Scheduling adhan alarm for $prayerName at $triggerTime (isIsha: $isIsha)")
+                    scheduleAdhanAlarm(prayerName, soundFile, triggerTime, requestCode, isIsha)
+                    result.success(null)
+                }
+                "cancelAllAlarms" -> {
+                    Log.d("MainActivity", "Cancelling all adhan alarms")
+                    cancelAllAlarms()
                     result.success(null)
                 }
                 else -> result.notImplemented()
+            }
+        }
+    }
+    
+    private fun cancelAllAlarms() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        // Cancel alarms for request codes 99-110 (sunrise + 5 prayers + buffer)
+        for (requestCode in 99..110) {
+            val intent = Intent(this, AdhanAlarmReceiver::class.java)
+            val pendingIntent = PendingIntent.getBroadcast(
+                this,
+                requestCode,
+                intent,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (pendingIntent != null) {
+                alarmManager.cancel(pendingIntent)
+                pendingIntent.cancel()
+                Log.d("MainActivity", "Cancelled alarm with requestCode: $requestCode")
             }
         }
     }
@@ -130,12 +155,13 @@ class MainActivity : FlutterActivity() {
         handleAdhanLaunch()
     }
     
-    private fun scheduleAdhanAlarm(prayerName: String, soundFile: String, triggerTime: Long, requestCode: Int) {
+    private fun scheduleAdhanAlarm(prayerName: String, soundFile: String, triggerTime: Long, requestCode: Int, isIsha: Boolean = false) {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         
         val intent = Intent(this, AdhanAlarmReceiver::class.java).apply {
             putExtra("prayerName", prayerName)
             putExtra("soundFile", soundFile)
+            putExtra("isIsha", isIsha)
         }
         
         val pendingIntent = PendingIntent.getBroadcast(
@@ -160,7 +186,7 @@ class MainActivity : FlutterActivity() {
             )
         }
         
-        Log.d("MainActivity", "Adhan alarm scheduled for $prayerName at $triggerTime (requestCode: $requestCode)")
+        Log.d("MainActivity", "Adhan alarm scheduled for $prayerName at $triggerTime (requestCode: $requestCode, isIsha: $isIsha)")
     }
 
     private fun playAdhan(prayerName: String, soundFile: String) {

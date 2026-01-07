@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../core/adhan_notification_service.dart';
-import '../core/location_provider.dart';
+import '../core/prayer_time_service.dart';
 import '../presentation/widgets/app_header.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
@@ -88,16 +88,16 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final locationProvider = Provider.of<LocationProvider>(context);
+    final prayerService = Provider.of<PrayerTimeService>(context);
     
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             AppHeader(
-              city: locationProvider.city,
-              state: locationProvider.state,
-              isLoading: locationProvider.isLoading,
+              city: prayerService.city,
+              state: prayerService.state,
+              isLoading: prayerService.isLoading,
               showBackButton: true,
               showLocation: true,
             ),

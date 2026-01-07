@@ -7,7 +7,7 @@ import 'prayer_tracker_service.dart';
 import 'prayer_alert_service.dart';
 import 'prayer_sequence.dart';
 import '../../presentation/widgets/app_header.dart';
-import '../../core/location_provider.dart';
+import '../../core/prayer_time_service.dart';
 
 /// Screen for prayer movement tracking
 class PrayerTrackerScreen extends StatefulWidget {
@@ -92,6 +92,8 @@ class _PrayerTrackerScreenState extends State<PrayerTrackerScreen> {
   @override
   void dispose() {
     _sensorUpdateTimer?.cancel();
+    // Mark as disposed before stopping to prevent setState during dispose
+    _tracker.dispose();
     _tracker.stopTracking();
     super.dispose();
   }
@@ -164,17 +166,17 @@ class _PrayerTrackerScreenState extends State<PrayerTrackerScreen> {
   @override
   Widget build(BuildContext context) {
     final progress = _totalSteps > 0 ? (_currentStep / _totalSteps) : 0.0;
-    final locationProvider = Provider.of<LocationProvider>(context);
+    final prayerService = Provider.of<PrayerTimeService>(context);
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             AppHeader(
-              city: locationProvider.city,
-              state: locationProvider.state,
-              isLoading: locationProvider.isLoading,
-              onRefresh: () => locationProvider.refreshLocation(),
+              city: prayerService.city,
+              state: prayerService.state,
+              isLoading: prayerService.isLoading,
+              onRefresh: () => prayerService.refresh(),
               showLocation: true,
             ),
             Expanded(

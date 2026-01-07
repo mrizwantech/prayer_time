@@ -53,6 +53,9 @@ class PrayerTrackerService {
   final void Function(int stepIndex, int totalSteps)? onProgressChanged;
   final void Function(PrayerTrackerAlert alert)? onAlert;
   final void Function(List<PrayerMistake> mistakes, bool needsSajdaSahw)? onPrayerComplete;
+  
+  // Flag to prevent callbacks during dispose
+  bool _isDisposed = false;
 
   PrayerTrackerService({
     required PrayerPositionDetector positionDetector,
@@ -132,13 +135,20 @@ class PrayerTrackerService {
     onStateChanged?.call(_state);
   }
 
+  /// Mark as disposed to prevent callbacks
+  void dispose() {
+    _isDisposed = true;
+  }
+
   /// Stop tracking and get results
   void stopTracking() {
     _positionCheckTimer?.cancel();
     _positionDetector.stopDetection();
     _state = PrayerTrackingState.idle;
     _currentSequence = null;
-    onStateChanged?.call(_state);
+    if (!_isDisposed) {
+      onStateChanged?.call(_state);
+    }
   }
 
   /// Force complete prayer (for manual completion)

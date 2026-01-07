@@ -44,6 +44,7 @@ class LocationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('📍 LocationProvider: Checking permission...');
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -55,20 +56,33 @@ class LocationProvider extends ChangeNotifier {
         throw Exception('Location permissions are permanently denied.');
       }
 
-      // Try last known position first for faster load
+      debugPrint('📍 LocationProvider: Getting position...');
+      // Try last known position first for instant load
       Position? position = await Geolocator.getLastKnownPosition();
-      position ??= await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
+      debugPrint('📍 LocationProvider: Last known = ${position?.latitude}, ${position?.longitude}');
+      
+      if (position == null) {
+        debugPrint('📍 LocationProvider: Getting current position (lowest accuracy)...');
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.lowest,
+            timeLimit: Duration(seconds: 5),
+          ),
+        );
+      }
 
       _latitude = position.latitude;
       _longitude = position.longitude;
       _lastFetchDate = DateTime.now();
-
-      // Fetch city/state in parallel
-      await _fetchCityState(position.latitude, position.longitude);
+      debugPrint('📍 LocationProvider: Got location: $_latitude, $_longitude');
 
       _isLoading = false;
       notifyListeners();
+      
+      // Fetch city/state in background (don't block)
+      _fetchCityState(position.latitude, position.longitude);
     } catch (e) {
+      debugPrint('❌ LocationProvider error: $e');
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
@@ -94,5 +108,16 @@ class LocationProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('❌ Geocoding error: $e');
     }
+  }
+  
+  /// Update location data from external source (e.g., HomeScreen)
+  void updateFromExternal(String? city, String? state, double lat, double lng) {
+    _city = city;
+    _state = state;
+    _latitude = lat;
+    _longitude = lng;
+    _lastFetchDate = DateTime.now();
+    _isLoading = false;
+    notifyListeners();
   }
 }
