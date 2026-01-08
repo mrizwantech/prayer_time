@@ -3,24 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:islamic_prayer_times/presentation/widgets/qibla_compass.dart';
 import '../presentation/widgets/app_header.dart';
 import 'package:provider/provider.dart';
-import '../core/location_provider.dart';
+import '../core/prayer_time_service.dart';
 
 class QiblaScreen extends StatelessWidget {
   const QiblaScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final locationProvider = Provider.of<LocationProvider>(context);
+    final prayerService = Provider.of<PrayerTimeService>(context);
     
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             AppHeader(
-              city: locationProvider.city,
-              state: locationProvider.state,
-              isLoading: locationProvider.isLoading,
-              onRefresh: () => locationProvider.refreshLocation(),
+              city: prayerService.city,
+              state: prayerService.state,
+              isLoading: prayerService.isLoading,
+              onRefresh: () => prayerService.refresh(),
               showLocation: true,
             ),
             Expanded(

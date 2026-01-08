@@ -1,80 +1,160 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/time_format_settings.dart';
-import '../core/location_provider.dart';
+import '../core/calculation_method_settings.dart';
+import '../core/prayer_time_service.dart';
+import '../core/app_theme_settings.dart';
+import '../core/prayer_font_settings.dart';
 import 'notification_settings_screen.dart';
 import 'adhan_settings_screen.dart';
-import 'package:adhan/adhan.dart';
-import 'package:geolocator/geolocator.dart';
+import 'calculation_method_screen.dart';
+import 'monthly_calendar_screen.dart';
 import '../presentation/widgets/app_header.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  Future<Map<String, DateTime>> _getQuickPrayerTimes() async {
-    try {
-      // Try to get last known position for instant load
-      Position? position = await Geolocator.getLastKnownPosition();
-      
-      if (position != null) {
-        final coordinates = Coordinates(position.latitude, position.longitude);
-        final params = CalculationMethod.muslim_world_league.getParameters();
-        final dateComponents = DateComponents.from(DateTime.now());
-        final times = PrayerTimes(coordinates, dateComponents, params);
-        
-        return {
-          'Fajr': times.fajr,
-          'Sunrise': times.sunrise,
-          'Dhuhr': times.dhuhr,
-          'Asr': times.asr,
-          'Maghrib': times.maghrib,
-          'Isha': times.isha,
-        };
-      }
-    } catch (e) {
-      // Ignore errors and use defaults
-    }
-    
-    // Return empty map - AdhanSettingsScreen will use defaults
-    return {};
-  }
-
   @override
   Widget build(BuildContext context) {
     final timeFormatSettings = Provider.of<TimeFormatSettings>(context);
-    final locationProvider = Provider.of<LocationProvider>(context);
+    final prayerService = Provider.of<PrayerTimeService>(context);
+    final calculationMethodSettings = Provider.of<CalculationMethodSettings>(context);
+    final themeSettings = Provider.of<AppThemeSettings>(context);
+    final fontSettings = Provider.of<PrayerFontSettings>(context);
     
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             AppHeader(
-              city: locationProvider.city,
-              state: locationProvider.state,
-              isLoading: locationProvider.isLoading,
-              onRefresh: () => locationProvider.refreshLocation(),
+              city: prayerService.city,
+              state: prayerService.state,
+              isLoading: prayerService.isLoading,
+              onRefresh: () => prayerService.refresh(),
               showLocation: true,
             ),
             Expanded(
               child: ListView(
                 children: [
+                  // Prayer Calculation Method
+                  ListTile(
+                    leading: Icon(Icons.calculate, color: Colors.deepPurple),
+                    title: Text('Prayer Calculation Method'),
+                    subtitle: Text(
+                      calculationMethodSettings.selectedMethod?.displayName ?? 'Not selected',
+                    ),
+                    trailing: Icon(Icons.arrow_forward_ios),
+                    onTap: () async {
+                      final result = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CalculationMethodScreen(),
+                        ),
+                      );
+                      
+                      // If method was changed, reload prayer times
+                      if (result == true && context.mounted) {
+                        // Clear cache and reinitialize with new method
+                        prayerService.clearCache();
+                        debugPrint('🔄 Refreshing prayer times with new calculation method...');
+                        
+                        // Show a loading indicator
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (ctx) => PopScope(
+                            canPop: false,
+                            child: AlertDialog(
+                              content: Row(
+                                children: [
+                                  CircularProgressIndicator(),
+                                  SizedBox(width: 20),
+                                  Text('Updating prayer times...'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                        
+                        // Refresh prayer times
+                        await prayerService.refresh();
+                        
+                        // Close the loading dialog and show success
+                        if (context.mounted) {
+                          Navigator.of(context).pop(); // Close dialog
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Prayer times updated with new calculation method'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                  Divider(),
+
+                  // Monthly Prayer Calendar
+                  ListTile(
+                    leading: Icon(Icons.calendar_month, color: Colors.deepPurple),
+                    title: const Text('Monthly Prayer Calendar'),
+                    subtitle: const Text('View dates with daily prayer times'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const MonthlyCalendarScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(),
+
+                  // Prayer Font Size
+                  ListTile(
+                    leading: Icon(Icons.format_size, color: Colors.deepPurple),
+                    title: const Text('Prayer Font Size'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${(fontSettings.scale * 100).round()}%'),
+                        Slider(
+                          value: fontSettings.scale,
+                          min: PrayerFontSettings.minScale,
+                          max: PrayerFontSettings.maxScale,
+                          divisions: 7,
+                          label: '${(fontSettings.scale * 100).round()}%',
+                          onChanged: (val) => fontSettings.setScale(val),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(),
+                  
                   // Adhan Sound Settings
                   ListTile(
                     leading: Icon(Icons.music_note, color: Colors.deepPurple),
                     title: Text('Adhan & Sound'),
                     subtitle: Text('Configure prayer sounds and adhan'),
                     trailing: Icon(Icons.arrow_forward_ios),
-                    onTap: () async {
-                      // Get prayer times quickly before navigating
-                      final prayerTimes = await _getQuickPrayerTimes();
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => AdhanSettingsScreen(prayerTimes: prayerTimes),
-                          ),
-                        );
+                    onTap: () {
+                      // Use prayer times from PrayerTimeService
+                      final prayerTimes = <String, DateTime>{};
+                      if (prayerService.hasPrayerTimes) {
+                        prayerTimes['Fajr'] = prayerService.fajr!;
+                        prayerTimes['Sunrise'] = prayerService.sunrise!;
+                        prayerTimes['Dhuhr'] = prayerService.dhuhr!;
+                        prayerTimes['Asr'] = prayerService.asr!;
+                        prayerTimes['Maghrib'] = prayerService.maghrib!;
+                        prayerTimes['Isha'] = prayerService.isha!;
                       }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AdhanSettingsScreen(prayerTimes: prayerTimes),
+                        ),
+                      );
                     },
                   ),
                   Divider(),
@@ -101,11 +181,123 @@ class SettingsScreen extends StatelessWidget {
                     onChanged: (val) => timeFormatSettings.setFormat(val),
                     subtitle: Text(timeFormatSettings.is24Hour ? '24-hour' : '12-hour'),
                   ),
+                  Divider(),
+                  
+                  // Theme Mode
+                  ListTile(
+                    leading: Icon(themeSettings.themeModeIcon, color: Colors.deepPurple),
+                    title: const Text('App Theme'),
+                    subtitle: Text(themeSettings.themeModeDisplayName),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: () => _showThemePicker(context, themeSettings),
+                  ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+  
+  void _showThemePicker(BuildContext context, AppThemeSettings themeSettings) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.palette, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 12),
+                Text(
+                  'Select Theme',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _buildThemeOption(
+              context,
+              themeSettings,
+              AppThemeMode.light,
+              Icons.light_mode,
+              'Light',
+              'Bright theme for daytime use',
+            ),
+            _buildThemeOption(
+              context,
+              themeSettings,
+              AppThemeMode.dark,
+              Icons.dark_mode,
+              'Dark',
+              'Dark theme for nighttime use',
+            ),
+            _buildThemeOption(
+              context,
+              themeSettings,
+              AppThemeMode.system,
+              Icons.brightness_auto,
+              'System',
+              'Follow device settings',
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildThemeOption(
+    BuildContext context,
+    AppThemeSettings themeSettings,
+    AppThemeMode mode,
+    IconData icon,
+    String title,
+    String subtitle,
+  ) {
+    final isSelected = themeSettings.themeMode == mode;
+    final accentColor = Theme.of(context).colorScheme.primary;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected ? accentColor.withOpacity(0.15) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? accentColor : Colors.transparent,
+          width: 1,
+        ),
+      ),
+      child: ListTile(
+        leading: Icon(
+          icon,
+          color: isSelected ? accentColor : Theme.of(context).iconTheme.color?.withOpacity(0.6),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: isSelected ? accentColor : null,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        subtitle: Text(subtitle),
+        trailing: isSelected
+            ? Icon(Icons.check_circle, color: accentColor)
+            : null,
+        onTap: () {
+          themeSettings.setThemeMode(mode);
+          Navigator.pop(context);
+        },
       ),
     );
   }

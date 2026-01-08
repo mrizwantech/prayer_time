@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import android.graphics.BitmapFactory
 import androidx.core.app.NotificationCompat
 
 class AdhanService : Service() {
@@ -18,6 +19,8 @@ class AdhanService : Service() {
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var originalVolume: Int = -1
+    private var appVolume: Float = 1.0f
     private val CHANNEL_ID = "adhan_alert_channel_v2" // New channel ID for high priority
     private val NOTIFICATION_ID = 9999
 
@@ -29,6 +32,31 @@ class AdhanService : Service() {
         const val ACTION_RESUME = "RESUME_ADHAN"
         const val EXTRA_PRAYER_NAME = "PRAYER_NAME"
         const val EXTRA_SOUND_FILE = "SOUND_FILE"
+        const val EXTRA_LOCAL_FILE_PATH = "LOCAL_FILE_PATH"
+        const val EXTRA_VOLUME = "VOLUME"
+        
+        // Map Flutter asset names to Android resource names
+        // Android resource names cannot contain spaces or special characters
+        private val ASSET_TO_RESOURCE_MAP = mapOf(
+            "Rabeh Ibn Darah Al Jazairi - Adan Al Jazaer" to "rabeh_azan",
+            " Adham Al Sharqawe - Adhan" to "adham_al_sharqawe_adhan"
+            // Add more mappings here as you add new adhans
+        )
+        
+        fun mapFlutterAssetToResourceName(assetName: String): String {
+            // First check the mapping
+            ASSET_TO_RESOURCE_MAP[assetName]?.let { return it }
+            
+            // If not in map, convert to valid resource name:
+            // - lowercase
+            // - replace spaces and special chars with underscore
+            // - remove consecutive underscores
+            return assetName
+                .lowercase()
+                .replace(Regex("[^a-z0-9]"), "_")
+                .replace(Regex("_+"), "_")
+                .trim('_')
+        }
     }
     
     private var isPaused = false
@@ -44,9 +72,11 @@ class AdhanService : Service() {
         when (intent?.action) {
             ACTION_PLAY -> {
                 val prayerName = intent.getStringExtra(EXTRA_PRAYER_NAME) ?: "Prayer"
-                val soundFile = intent.getStringExtra(EXTRA_SOUND_FILE) ?: "azan1"
-                Log.d(TAG, "ACTION_PLAY: prayerName=$prayerName, soundFile=$soundFile")
-                playAdhan(prayerName, soundFile)
+                val soundFile = intent.getStringExtra(EXTRA_SOUND_FILE) ?: "fajr"
+                val localFilePath = intent.getStringExtra(EXTRA_LOCAL_FILE_PATH)
+                val volume = intent.getFloatExtra(EXTRA_VOLUME, 1.0f)
+                Log.d(TAG, "ACTION_PLAY: prayerName=$prayerName, soundFile=$soundFile, localFilePath=$localFilePath, volume=$volume")
+                playAdhan(prayerName, soundFile, localFilePath, volume)
             }
             ACTION_STOP -> {
                 Log.d(TAG, "ACTION_STOP received, calling stopAdhan()")
@@ -61,7 +91,8 @@ class AdhanService : Service() {
                 resumeAdhan()
             }
         }
-        return START_NOT_STICKY
+            // Keep service alive if system kills it during playback.
+            return START_STICKY
     }
     
     private fun pauseAdhan() {
@@ -92,9 +123,12 @@ class AdhanService : Service() {
         }
     }
 
-    private fun playAdhan(prayerName: String, soundFile: String) {
+    private fun playAdhan(prayerName: String, soundFile: String, localFilePath: String? = null, volume: Float = 1.0f) {
         try {
-            Log.d(TAG, "🎵 playAdhan() called: prayerName=$prayerName, soundFile=$soundFile")
+            Log.d(TAG, "🎵 playAdhan() called: prayerName=$prayerName, soundFile=$soundFile, localFilePath=$localFilePath, volume=$volume")
+            
+            // Store app volume for use in MediaPlayer
+            appVolume = volume
             
             // CRITICAL: Start foreground IMMEDIATELY to avoid ForegroundServiceDidNotStartInTimeException
             // This MUST be called within 5 seconds of startForegroundService()
@@ -116,37 +150,59 @@ class AdhanService : Service() {
 
             // Request audio focus
             requestAudioFocus()
-
-            // Get resource ID for the sound file, with fallback to azan1
-            var resourceId = resources.getIdentifier(soundFile, "raw", packageName)
-            var actualSoundFile = soundFile
-            if (resourceId == 0) {
-                Log.w(TAG, "Sound file not found: $soundFile, falling back to azan1")
-                resourceId = resources.getIdentifier("azan1", "raw", packageName)
-                actualSoundFile = "azan1"
-            }
             
-            if (resourceId == 0) {
-                Log.e(TAG, "No sound files available, stopping service")
-                releaseWakeLock()
-                stopSelf()
-                return
+            // Save original device volume and set to max for independent control
+            audioManager?.let { am ->
+                originalVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+                val maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                am.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0)
+                Log.d(TAG, "📢 Saved original volume: $originalVolume, set to max: $maxVolume")
             }
-            
-            Log.d(TAG, "Using sound file: $actualSoundFile (resourceId: $resourceId)")
 
             // Create media player with proper audio attributes for media playback
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setUsage(AudioAttributes.USAGE_ALARM)
                         .build()
                 )
-                resources.openRawResourceFd(resourceId).use { afd ->
-                    setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                
+                // Check if we have a local file path (downloaded adhan)
+                if (!localFilePath.isNullOrEmpty() && java.io.File(localFilePath).exists()) {
+                    Log.d(TAG, "📁 Using local file: $localFilePath")
+                    setDataSource(localFilePath)
+                } else {
+                    // Map Flutter asset name to Android resource name
+                    val resourceName = mapFlutterAssetToResourceName(soundFile)
+                    Log.d(TAG, "Mapping Flutter asset '$soundFile' to resource '$resourceName'")
+                    
+                    // Fall back to resource file
+                    var resourceId = resources.getIdentifier(resourceName, "raw", packageName)
+                    var actualSoundFile = resourceName
+                    if (resourceId == 0) {
+                        Log.w(TAG, "Sound file not found: $resourceName, falling back to fajr")
+                        resourceId = resources.getIdentifier("fajr", "raw", packageName)
+                        actualSoundFile = "fajr"
+                    }
+                    
+                    if (resourceId == 0) {
+                        Log.e(TAG, "No sound files available, stopping service")
+                        releaseWakeLock()
+                        stopSelf()
+                        return
+                    }
+                    
+                    Log.d(TAG, "Using sound file: $actualSoundFile (resourceId: $resourceId)")
+                    resources.openRawResourceFd(resourceId).use { afd ->
+                        setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                    }
                 }
+                
                 prepare()
+                // Set app-controlled volume (device volume is at max, this controls actual output)
+                setVolume(appVolume, appVolume)
+                Log.d(TAG, "📢 MediaPlayer volume set to $appVolume (device at max)")
                 setOnCompletionListener {
                     Log.d(TAG, "Adhan playback completed")
                     stopAdhan()
@@ -288,7 +344,8 @@ class AdhanService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("🕌 $prayerName Adhan")
             .setContentText("Tap to view adhan player")
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setLargeIcon(BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -367,6 +424,14 @@ class AdhanService : Service() {
                 Log.d(TAG, "MediaPlayer released")
             } ?: Log.d(TAG, "MediaPlayer is null, nothing to stop")
             mediaPlayer = null
+            
+            // Restore original device volume
+            if (originalVolume >= 0) {
+                audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0)
+                Log.d(TAG, "📢 Restored original volume: $originalVolume")
+                originalVolume = -1
+            }
+            
             abandonAudioFocus()
             releaseWakeLock()
             Log.d(TAG, "Stopping foreground service...")

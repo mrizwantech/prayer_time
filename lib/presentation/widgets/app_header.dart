@@ -23,6 +23,13 @@ class AppHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final accentColor = theme.colorScheme.primary;
+    final backgroundColor = isDark ? const Color(0xFF1a1d2e) : theme.colorScheme.surface;
+    final surfaceColor = isDark ? const Color(0xFF252836) : theme.colorScheme.surface;
+    final textColor = isDark ? Colors.white : theme.colorScheme.onSurface;
+    
     // Determine the location text only if we have data
     String? locationText;
     if (city != null && state != null) {
@@ -39,14 +46,11 @@ class AppHeader extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF1a1d2e),
-            const Color(0xFF252836),
-          ],
+          colors: [backgroundColor, surfaceColor],
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -63,9 +67,9 @@ class AppHeader extends StatelessWidget {
           // Back Button (for sub-pages)
           if (showBackButton)
             IconButton(
-              icon: const Icon(
+              icon: Icon(
                 Icons.arrow_back_ios,
-                color: Colors.white,
+                color: textColor,
                 size: 20,
               ),
               onPressed: () => Navigator.of(context).pop(),
@@ -80,12 +84,12 @@ class AppHeader extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00D9A5).withOpacity(0.2),
+                  color: accentColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const FaIcon(
+                child: FaIcon(
                   FontAwesomeIcons.mosque,
-                  color: Color(0xFF00D9A5),
+                  color: accentColor,
                   size: 18,
                 ),
               ),
@@ -96,10 +100,10 @@ class AppHeader extends StatelessWidget {
                 children: [
                   Text(
                     title ?? 'Azanify',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: textColor,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -112,14 +116,14 @@ class AppHeader extends StatelessWidget {
                           size: 12,
                           color: isLoading 
                               ? Colors.orange 
-                              : const Color(0xFF00D9A5),
+                              : accentColor,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           locationText,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.7),
+                            color: textColor.withOpacity(0.7),
                           ),
                         ),
                       ],
@@ -135,23 +139,22 @@ class AppHeader extends StatelessWidget {
           if (onRefresh != null && showLocation)
             Container(
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
+                color: textColor.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: IconButton(
                 icon: isLoading
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Color(0xFF00D9A5),
+                          color: accentColor,
                         ),
                       )
-                    : const Icon(
+                    : Icon(
                         Icons.refresh,
-                        color: Color(0xFF00D9A5),
-                        size: 20,
+                        color: accentColor,
                       ),
                 onPressed: isLoading ? null : onRefresh,
                 padding: const EdgeInsets.all(8),

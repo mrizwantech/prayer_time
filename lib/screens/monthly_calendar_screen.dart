@@ -1,0 +1,351 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import 'package:hijri_date/hijri_date.dart';
+
+import '../core/prayer_time_service.dart';
+import '../core/time_format_settings.dart';
+import '../presentation/widgets/app_header.dart';
+
+class MonthlyCalendarScreen extends StatefulWidget {
+  const MonthlyCalendarScreen({super.key});
+
+  @override
+  State<MonthlyCalendarScreen> createState() => _MonthlyCalendarScreenState();
+}
+
+Widget _infoChip(String label, DateTime time, bool is24, Color color) {
+  final formatted = is24 ? DateFormat('HH:mm').format(time) : DateFormat('hh:mm a').format(time);
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.2),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: color.withOpacity(0.6)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black.withOpacity(0.8)),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          formatted,
+          style: TextStyle(fontWeight: FontWeight.w500, color: Colors.black.withOpacity(0.75)),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
+  late DateTime _focusedMonth;
+  late DateTime _selectedDate;
+  Map<String, DateTime>? _selectedTimes;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _focusedMonth = DateTime(now.year, now.month, 1);
+    _selectedDate = now;
+    _loadTimesFor(_selectedDate);
+  }
+
+  void _changeMonth(int delta) {
+    setState(() {
+      _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month + delta, 1);
+      _selectedDate = _focusedMonth;
+      _loadTimesFor(_selectedDate);
+    });
+  }
+
+  void _loadTimesFor(DateTime date) {
+    final prayerService = Provider.of<PrayerTimeService>(context, listen: false);
+    _selectedTimes = prayerService.getPrayerTimesForDate(date);
+  }
+
+  String _formatTime(DateTime time, bool is24Hour) {
+    if (is24Hour) {
+      return DateFormat('HH:mm').format(time);
+    }
+    return DateFormat('hh:mm a').format(time);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final prayerService = Provider.of<PrayerTimeService>(context);
+    final timeSettings = Provider.of<TimeFormatSettings>(context);
+
+    final daysInMonth = DateUtils.getDaysInMonth(_focusedMonth.year, _focusedMonth.month);
+    final firstWeekday = DateTime(_focusedMonth.year, _focusedMonth.month, 1).weekday; // 1=Mon
+    final cells = <DateTime?>[];
+    final leadingEmpty = (firstWeekday % 7); // make Sunday=0
+    for (int i = 0; i < leadingEmpty; i++) {
+      cells.add(null);
+    }
+    for (int day = 1; day <= daysInMonth; day++) {
+      cells.add(DateTime(_focusedMonth.year, _focusedMonth.month, day));
+    }
+
+    final hijriMonth = HijriDate.fromDate(_focusedMonth);
+
+    return Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [
+            AppHeader(
+              city: prayerService.city,
+              state: prayerService.state,
+              isLoading: prayerService.isLoading,
+              onRefresh: () => prayerService.refresh(),
+              showLocation: true,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left, size: 28),
+                    onPressed: () => _changeMonth(-1),
+                  ),
+                  Column(
+                    children: [
+                      Text(
+                        DateFormat('MMMM yyyy').format(_focusedMonth),
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '${hijriMonth.toFormat('MMMM')} ${hijriMonth.hYear}',
+                        style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right, size: 28),
+                    onPressed: () => _changeMonth(1),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: const [
+                  Text('Sun', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Mon', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Tue', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Wed', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Thu', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Fri', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Sat', style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: GridView.builder(
+                  itemCount: cells.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    mainAxisSpacing: 6,
+                    crossAxisSpacing: 6,
+                    childAspectRatio: 0.75,
+                  ),
+                  itemBuilder: (context, index) {
+                    final date = cells[index];
+                    if (date == null) {
+                      return const SizedBox.shrink();
+                    }
+                    final isToday = DateUtils.isSameDay(date, DateTime.now());
+                    final isSelected = DateUtils.isSameDay(date, _selectedDate);
+                    final hijri = HijriDate.fromDate(date);
+                    final isHijriMonthStart = hijri.hDay == 1;
+                    final isHijriDay20 = hijri.hDay == 20;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedDate = date;
+                          _loadTimesFor(date);
+                        });
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? Colors.teal.shade600
+                              : isToday
+                                  ? Colors.teal.shade100
+                                  : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.teal.shade800
+                                : isHijriMonthStart
+                                    ? Colors.amber.shade600
+                                    : isHijriDay20
+                                        ? Colors.teal.shade400
+                                        : Colors.grey.shade300,
+                            width: isSelected || isHijriMonthStart ? 1.6 : 1,
+                          ),
+                        ),
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '${date.day}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : isToday
+                                          ? Colors.teal.shade900
+                                          : Colors.grey.shade800,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${hijri.hDay}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isSelected
+                                      ? Colors.white.withOpacity(0.85)
+                                      : isHijriMonthStart
+                                          ? Colors.amber.shade700
+                                          : Colors.grey.shade600,
+                                ),
+                              ),
+                              if (isHijriMonthStart || isHijriDay20)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: BoxDecoration(
+                                          color: isHijriMonthStart
+                                              ? Colors.amber.shade600
+                                              : Colors.teal.shade500,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: _selectedTimes == null
+                  ? Text(
+                      'Prayer times unavailable for this date. Ensure location is set.',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Prayer times for ${DateFormat('EEE, MMM d, yyyy').format(_selectedDate)}',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Hijri: ${HijriDate.fromDate(_selectedDate).toFormat('dd MMMM yyyy')}',
+                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                        ),
+                        const SizedBox(height: 8),
+                        if (HijriDate.fromDate(_selectedDate).hMonth == 9)
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              _infoChip('Suhoor ends (Fajr)', _selectedTimes!['Fajr']!, timeSettings.is24Hour, Colors.amber.shade200),
+                              _infoChip('Iftar (Maghrib)', _selectedTimes!['Maghrib']!, timeSettings.is24Hour, Colors.teal.shade200),
+                            ],
+                          ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: _selectedTimes!.entries.map((e) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.teal.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.teal.shade200),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    e.key,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.teal.shade900,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _formatTime(e.value, timeSettings.is24Hour),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey.shade800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 8),
+                        ..._selectedTimes!.entries.map(
+                          (e) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(e.key, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                Text(
+                                  _formatTime(e.value, timeSettings.is24Hour),
+                                  style: const TextStyle(fontFeatures: []),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

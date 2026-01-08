@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:adhan/adhan.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'adhan_sound_service.dart';
 import '../main.dart' show navigatorKey;
 
@@ -20,6 +21,9 @@ class AdhanNotificationService {
   final _soundService = AdhanSoundService();
   bool _isAdhanPlayerActive = false; // Prevent multiple launches
   String? _pendingAdhanLaunch; // Queue for pending adhan player launch
+
+  bool get isAdhanPlayerActive => _isAdhanPlayerActive;
+  bool get hasPendingAdhanLaunch => _pendingAdhanLaunch != null;
   
   static const platform = MethodChannel('com.mrizwantech.azanify/adhan_alarm');
   
@@ -33,9 +37,17 @@ class AdhanNotificationService {
     
     // Set the local timezone
     final timezoneInfo = await FlutterTimezone.getLocalTimezone();
+    // FlutterTimezone 5.x returns TimezoneInfo object, get the identifier
     final timeZoneName = timezoneInfo.identifier;
-    tz.setLocalLocation(tz.getLocation(timeZoneName));
-    debugPrint('Local timezone set to: $timeZoneName');
+    try {
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+      debugPrint('Local timezone set to: $timeZoneName');
+    } catch (e) {
+      debugPrint('Error setting timezone $timeZoneName: $e');
+      // Fallback to UTC if timezone not found
+      tz.setLocalLocation(tz.UTC);
+      debugPrint('Falling back to UTC timezone');
+    }
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
@@ -151,9 +163,15 @@ class AdhanNotificationService {
     required DateTime prayerTime,
     required DateTime nextPrayerTime,
   }) async {
-    final timeUntilPrayer = prayerTime.difference(DateTime.now());
+    final now = DateTime.now();
+    final timeUntilPrayer = prayerTime.difference(now);
     
-    if (timeUntilPrayer.isNegative) return;
+    debugPrint('📅 Checking $prayerName: prayerTime=$prayerTime, now=$now, diff=${timeUntilPrayer.inMinutes} min');
+    
+    if (timeUntilPrayer.isNegative) {
+      debugPrint('⏭️ Skipping $prayerName - prayer time already passed');
+      return;
+    }
 
     final scheduledTime = tz.TZDateTime.from(prayerTime, tz.local);
     
@@ -170,22 +188,27 @@ class AdhanNotificationService {
     debugPrint('   Sound enabled for $prayerName: $shouldPlaySound');
 
     try {
-      // Schedule Android alarm to auto-launch adhan player and play sound
-      // This also shows the notification via the native foreground service
+      // Schedule Android alarm. For test button (prayerName == 'Test'), schedule at the provided time.
+      // For normal prayers, rely on native single-next chaining for reliability.
       if (shouldPlaySound) {
         try {
           final selectedAdhan = await _soundService.getSelectedAdhan();
-          await platform.invokeMethod('scheduleAdhanAlarm', {
-            'prayerName': prayerName,
-            'soundFile': selectedAdhan,
-            'triggerTime': scheduledTime.millisecondsSinceEpoch,
-            'requestCode': id,
-          });
-          debugPrint('✅ Android native alarm scheduled for $prayerName');
+          if (prayerName.toLowerCase() == 'test') {
+            await platform.invokeMethod('scheduleAdhanAlarm', {
+              'prayerName': prayerName,
+              'soundFile': selectedAdhan,
+              'triggerTime': scheduledTime.millisecondsSinceEpoch,
+              'requestCode': id,
+            });
+            debugPrint('✅ Android native TEST alarm scheduled for $prayerName at $scheduledTime');
+          } else {
+            await platform.invokeMethod('scheduleNextPrayer');
+            debugPrint('✅ Requested native scheduleNextPrayer for $prayerName');
+          }
           // Don't schedule Flutter notification - native service handles everything
           return;
         } catch (e) {
-          debugPrint('⚠️ Error scheduling Android alarm: $e - falling back to Flutter notification');
+          debugPrint('⚠️ Error requesting native alarm: $e - falling back to Flutter notification');
         }
       }
       
@@ -251,6 +274,56 @@ class AdhanNotificationService {
       debugPrint('Error scheduling notification: $e');
       debugPrint('Note: Exact alarm permission may be required on Android 12+');
     }
+  }
+
+  /// Schedule a silent Tahajjud reminder (no adhan) before Fajr.
+  Future<void> scheduleTahajjudNotification({
+    required DateTime ishaTime,
+    required DateTime fajrTime,
+    Duration offset = const Duration(minutes: 90),
+  }) async {
+    // Place reminder offset minutes before Fajr, but after Isha, and only if still future.
+    var target = fajrTime.subtract(offset);
+    if (target.isBefore(ishaTime)) {
+      target = ishaTime.add(const Duration(minutes: 5));
+    }
+
+    final now = DateTime.now();
+    if (!target.isAfter(now)) {
+      debugPrint('⏭️ Skipping Tahajjud reminder - time already passed ($target)');
+      return;
+    }
+
+    final scheduledTime = tz.TZDateTime.from(target, tz.local);
+    debugPrint('🕐 Scheduling Tahajjud reminder at $scheduledTime (offset: ${offset.inMinutes}m before Fajr)');
+
+    await _notifications.zonedSchedule(
+      910, // dedicated id for Tahajjud
+      'Tahajjud Reminder',
+      'Time for night prayer (no adhan).',
+      scheduledTime,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: false,
+          enableVibration: true,
+          fullScreenIntent: false,
+          category: AndroidNotificationCategory.reminder,
+          autoCancel: true,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: false,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      payload: 'Tahajjud',
+    );
   }
 
   /// Schedule a simple notification for Sunrise (no adhan sound)
@@ -441,6 +514,29 @@ class AdhanNotificationService {
 
   Future<void> cancelAllNotifications() async {
     await _notifications.cancelAll();
+    // Also cancel native alarms
+    try {
+      await platform.invokeMethod('cancelAllAlarms');
+    } catch (e) {
+      debugPrint('Error cancelling native alarms: $e');
+    }
+  }
+  
+  /// Get list of pending notifications for debugging
+  Future<List<PendingNotificationRequest>> getPendingNotifications() async {
+    return await _notifications.pendingNotificationRequests();
+  }
+  
+  /// Debug method to print all scheduled notifications
+  Future<void> debugPrintPendingNotifications() async {
+    final pending = await getPendingNotifications();
+    debugPrint('=== PENDING NOTIFICATIONS (${pending.length}) ===');
+    for (var notification in pending) {
+      debugPrint('  ID: ${notification.id}, Title: ${notification.title}, Payload: ${notification.payload}');
+    }
+    if (pending.isEmpty) {
+      debugPrint('  (No pending notifications scheduled)');
+    }
   }
   
   /// Schedule adhan playback to happen at notification time
@@ -579,69 +675,88 @@ class AdhanNotificationService {
     return nextPrayerTime.difference(DateTime.now());
   }
 
+  /// Get calculation parameters from saved preferences
+  Future<CalculationParameters> _getCalculationParams() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedMethod = prefs.getString('calculation_method');
+    
+    if (savedMethod != null) {
+      switch (savedMethod) {
+        case 'muslimWorldLeague':
+          return CalculationMethod.muslim_world_league.getParameters();
+        case 'isna':
+          return CalculationMethod.north_america.getParameters();
+        case 'egyptian':
+          return CalculationMethod.egyptian.getParameters();
+        case 'ummAlQura':
+          return CalculationMethod.umm_al_qura.getParameters();
+        case 'dubai':
+          return CalculationMethod.dubai.getParameters();
+        case 'qatar':
+          return CalculationMethod.qatar.getParameters();
+        case 'kuwait':
+          return CalculationMethod.kuwait.getParameters();
+        case 'singapore':
+          return CalculationMethod.singapore.getParameters();
+        case 'karachi':
+          return CalculationMethod.karachi.getParameters();
+        case 'tehran':
+          return CalculationMethod.tehran.getParameters();
+        case 'turkey':
+          return CalculationMethod.turkey.getParameters();
+      }
+    }
+    
+    // Default to ISNA for North America
+    return CalculationMethod.north_america.getParameters();
+  }
+
   /// Schedule all prayer notifications for today using user's location
-  Future<void> scheduleAllPrayersForToday() async {
+  /// If coordinates are provided, use them instead of fetching location again
+  Future<void> scheduleAllPrayersForToday({double? latitude, double? longitude}) async {
     try {
-      debugPrint('=== Scheduling all prayers for today ===');
+      debugPrint('=== Scheduling next prayer (single) ===');
       
-      // Get current location
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      debugPrint('Location: ${position.latitude}, ${position.longitude}');
-
-      // Calculate prayer times using adhan package
-      final coordinates = Coordinates(position.latitude, position.longitude);
-      final params = CalculationMethod.muslim_world_league.getParameters();
-      final dateComponents = DateComponents.from(DateTime.now());
-      final prayerTimes = PrayerTimes(coordinates, dateComponents, params);
-
-      // Map prayer names to their times
-      final prayers = {
-        'Fajr': prayerTimes.fajr,
-        'Dhuhr': prayerTimes.dhuhr,
-        'Asr': prayerTimes.asr,
-        'Maghrib': prayerTimes.maghrib,
-        'Isha': prayerTimes.isha,
-      };
-
-      // Schedule Sunrise notification (simple notification, no adhan)
-      await scheduleSunriseNotification(
-        id: 99, // Use ID 99 for Sunrise
-        sunriseTime: prayerTimes.sunrise,
-      );
-      debugPrint('Scheduled Sunrise at ${prayerTimes.sunrise}');
-
-      // Schedule notifications for each prayer
-      int id = 100; // Starting ID for prayer notifications
-      for (var entry in prayers.entries) {
-        final prayerName = entry.key;
-        final prayerTime = entry.value;
-        
-        // Find next prayer time for snooze calculation
-        DateTime nextPrayerTime;
-        if (prayerName == 'Isha') {
-          // After Isha, next is tomorrow's Fajr
-          final tomorrowComponents = DateComponents.from(DateTime.now().add(const Duration(days: 1)));
-          final tomorrowTimes = PrayerTimes(coordinates, tomorrowComponents, params);
-          nextPrayerTime = tomorrowTimes.fajr;
-        } else {
-          // Get next prayer in sequence
-          final prayersList = prayers.values.toList();
-          final currentIndex = prayersList.indexOf(prayerTime);
-          nextPrayerTime = prayersList[currentIndex + 1];
+      double lat;
+      double lng;
+      
+      // Use provided coordinates or fetch location
+      if (latitude != null && longitude != null) {
+        lat = latitude;
+        lng = longitude;
+        debugPrint('Using provided location: $lat, $lng');
+      } else {
+        // Try last known first, then current with lowest accuracy
+        Position? position = await Geolocator.getLastKnownPosition();
+        if (position == null) {
+          position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.lowest,
+              timeLimit: Duration(seconds: 5),
+            ),
+          );
         }
-
-        await schedulePrayerNotification(
-          id: id++,
-          prayerName: prayerName,
-          prayerTime: prayerTime,
-          nextPrayerTime: nextPrayerTime,
-        );
-        debugPrint('Scheduled $prayerName at $prayerTime');
+        lat = position.latitude;
+        lng = position.longitude;
+        debugPrint('Fetched location: $lat, $lng');
       }
 
-      debugPrint('All prayer notifications scheduled successfully');
+      // Persist coords for native alarm scheduler (Flutter stores doubles as raw long bits).
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('latitude', lat);
+      await prefs.setDouble('longitude', lng);
+      debugPrint('Saved coords to SharedPreferences for native scheduling: $lat, $lng');
+
+      // Instead of scheduling all, ask native to schedule the single next alarm
+      // Native uses stored prefs (lat/lng/method) to compute next prayer.
+      try {
+        await platform.invokeMethod('scheduleNextPrayer');
+        debugPrint('✅ Requested native scheduleNextPrayer');
+      } catch (e) {
+        debugPrint('❌ Error requesting native scheduleNextPrayer: $e');
+      }
+
+      debugPrint('Requested scheduling of next prayer (single alarm)');
     } catch (e) {
       debugPrint('Error scheduling all prayers: $e');
     }

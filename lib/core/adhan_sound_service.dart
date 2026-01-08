@@ -10,6 +10,8 @@ class AdhanSoundService {
   AdhanSoundService._internal() {
     // Listen for adhan player launch requests from native side
     platform.setMethodCallHandler(_handleNativeMethodCall);
+    // On cold starts, pull any pending launch the native side buffered
+    _checkForPendingAdhanLaunch();
   }
 
   final AudioPlayer _player = AudioPlayer();
@@ -35,6 +37,18 @@ class AdhanSoundService {
   void setLaunchAdhanPlayerCallback(Function(String) callback) {
     _launchAdhanPlayerCallback = callback;
   }
+
+  Future<void> _checkForPendingAdhanLaunch() async {
+    try {
+      final pending = await platform.invokeMethod<String>('consumePendingAdhanLaunch');
+      if (pending != null && pending.isNotEmpty) {
+        debugPrint('📲 Consumed pending adhan launch for $pending');
+        _launchAdhanPlayerCallback?.call(pending);
+      }
+    } catch (e) {
+      debugPrint('❌ Error checking pending adhan launch: $e');
+    }
+  }
   
   // Available audio files - users can add any MP3 file to assets/sounds/
   // The filename (without .mp3) will be the display name
@@ -44,60 +58,103 @@ class AdhanSoundService {
   
   // Cache for discovered audio files
   List<String> _availableAdhans = ['Silent'];
+  bool _cacheValid = false;
   
-  /// Discover available adhan audio files in assets/sounds/
-  Future<List<String>> getAvailableAdhans() async {
-    if (_availableAdhans.length > 1) {
+  /// Clear the cache to force re-discovery (call after download/delete)
+  void clearCache() {
+    _cacheValid = false;
+    _availableAdhans = ['Silent'];
+  }
+  
+  /// List of bundled adhan files in android/app/src/main/res/raw/
+  /// ADD YOUR NEW ADHAN FILES HERE (display name for UI)
+  /// The actual file in res/raw should be lowercase with underscores (e.g., rabeh_azan.mp3)
+  static const List<String> bundledAdhans = [
+    'fajr',
+    'Rabeh Ibn Darah Al Jazairi - Adan Al Jazaer',
+    ' Adham Al Sharqawe - Adhan'
+    // Add more adhans here as you add them to res/raw/
+  ];
+  
+  /// Default adhan for non-Fajr prayers (should not be 'fajr')
+  static String get defaultNonFajrAdhan {
+    // Return first bundled adhan that isn't 'fajr'
+    for (final adhan in bundledAdhans) {
+      if (adhan.toLowerCase() != 'fajr') {
+        return adhan;
+      }
+    }
+    return 'Silent';
+  }
+  
+  /// Discover available adhan audio files (bundled + downloaded)
+  /// Set excludeFajr to true to get only adhans for non-Fajr prayers selection
+  Future<List<String>> getAvailableAdhans({bool excludeFajr = false}) async {
+    if (_cacheValid && _availableAdhans.length > 1) {
+      if (excludeFajr) {
+        return _availableAdhans.where((a) => a.toLowerCase() != 'fajr').toList();
+      }
       return _availableAdhans; // Return cached list
     }
     
     final List<String> foundAdhans = ['Silent'];
     
-    // Try to load common adhan file names
-    final commonNames = [
-      // Numbered adhans (checking up to 20)
-      for (int i = 1; i <= 20; i++) 'adhan$i',
-      for (int i = 1; i <= 20; i++) 'azan$i',
-      // Common mosque names
-      'makkah', 'madina', 'egypt', 'turkey', 'aqsa', 'quba',
-      'al_aqsa', 'al_madina', 'al_makkah',
-      // Common reciters/styles
-      'sheikh_ali', 'sheikh_sudais', 'mishary', 'abdul_basit',
-      'fajr_adhan', 'regular_adhan', 'beautiful_adhan',
-      // Alternative spellings
-      'mecca', 'medina', 'madinah', 'makkah_adhan', 'madina_adhan',
-    ];
-    
-    for (final name in commonNames) {
-      try {
-        await rootBundle.load('assets/sounds/$name.mp3');
-        foundAdhans.add(name);
-        debugPrint('✅ Found adhan: $name.mp3');
-      } catch (e) {
-        // File doesn't exist, skip
-      }
+    // Add all bundled adhans from the static list
+    // Files are stored in android/app/src/main/res/raw/
+    for (final name in bundledAdhans) {
+      foundAdhans.add(name);
+      debugPrint('✅ Bundled adhan: $name');
     }
     
     _availableAdhans = foundAdhans;
+    _cacheValid = true;
+    
+    if (excludeFajr) {
+      return foundAdhans.where((a) => a.toLowerCase() != 'fajr').toList();
+    }
     return foundAdhans;
   }
 
   // Keys for SharedPreferences
   static const String _selectedAdhanKey = 'selected_adhan';
+  static const String _adhanVolumeKey = 'flutter.adhan_volume';
   static const String _fajrSoundKey = 'fajr_sound_enabled';
   static const String _dhuhrSoundKey = 'dhuhr_sound_enabled';
   static const String _asrSoundKey = 'asr_sound_enabled';
   static const String _maghribSoundKey = 'maghrib_sound_enabled';
   static const String _ishaSoundKey = 'isha_sound_enabled';
 
-  /// Get selected adhan - validates stored value exists, falls back to azan1
+  /// Get adhan volume (0.0 to 1.0)
+  Future<double> getAdhanVolume() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Migrate from legacy key without prefix if present
+    final legacy = prefs.getDouble('adhan_volume');
+    if (legacy != null) {
+      return legacy;
+    }
+    return prefs.getDouble(_adhanVolumeKey) ?? 1.0;
+  }
+
+  /// Set adhan volume (0.0 to 1.0)
+  Future<void> setAdhanVolume(double volume) async {
+    final prefs = await SharedPreferences.getInstance();
+    final clamped = volume.clamp(0.0, 1.0);
+    await prefs.setDouble(_adhanVolumeKey, clamped);
+    // Also write legacy key for backward compatibility
+    await prefs.setDouble('adhan_volume', clamped);
+    debugPrint('Adhan volume set to: ${(volume * 100).toInt()}%');
+  }
+
+  /// Get selected adhan for non-Fajr prayers
+  /// (Fajr always uses 'fajr' adhan - handled in playAdhan)
+  /// Falls back to first non-fajr bundled adhan
   Future<String> getSelectedAdhan() async {
     final prefs = await SharedPreferences.getInstance();
     final stored = prefs.getString(_selectedAdhanKey);
     
-    // If nothing stored, use default
-    if (stored == null || stored.isEmpty) {
-      return 'azan1';
+    // If nothing stored or 'fajr' stored, use default non-fajr adhan
+    if (stored == null || stored.isEmpty || stored.toLowerCase() == 'fajr') {
+      return defaultNonFajrAdhan;
     }
     
     // If Silent, return as-is
@@ -120,10 +177,11 @@ class AdhanSoundService {
       return correctName;
     }
     
-    // Invalid stored value - reset to default
-    debugPrint('⚠️ Invalid adhan "$stored" - resetting to azan1');
-    await prefs.setString(_selectedAdhanKey, 'azan1');
-    return 'azan1';
+    // Invalid stored value - reset to default non-fajr adhan
+    final defaultAdhan = defaultNonFajrAdhan;
+    debugPrint('⚠️ Invalid adhan "$stored" - resetting to $defaultAdhan');
+    await prefs.setString(_selectedAdhanKey, defaultAdhan);
+    return defaultAdhan;
   }
 
   /// Set selected adhan
@@ -169,30 +227,37 @@ class AdhanSoundService {
         return;
       }
 
-      final selectedAdhan = await getSelectedAdhan();
+      // For Fajr prayer, always use 'fajr' adhan if available
+      String selectedAdhan;
+      if (prayerName.toLowerCase() == 'fajr') {
+        selectedAdhan = 'fajr';
+        debugPrint('🌅 Fajr prayer - using fajr adhan');
+      } else {
+        selectedAdhan = await getSelectedAdhan();
+      }
       
       if (selectedAdhan == 'Silent') {
         debugPrint('🔇 Silent mode - no adhan will play');
         return;
       }
-
+      
+      // Get adhan volume
+      final volume = await getAdhanVolume();
+      debugPrint('   Volume: ${(volume * 100).toInt()}%');
+      
+      // Use bundled asset adhan
       debugPrint('🔊 Starting native adhan service for $prayerName');
       debugPrint('   Selected adhan: $selectedAdhan');
       
-      // Use native service to play adhan (works even when app is killed)
       try {
         await platform.invokeMethod('playAdhan', {
           'prayerName': prayerName,
-          'soundFile': selectedAdhan.toLowerCase(),
+          'soundFile': selectedAdhan,
+          'volume': volume,
         });
         debugPrint('✅ Native adhan service started');
       } catch (e) {
         debugPrint('❌ Error starting native service: $e');
-        debugPrint('   Falling back to AudioPlayer...');
-        // Fallback to AudioPlayer if native service fails
-        final audioPath = 'sounds/${selectedAdhan.toLowerCase()}.mp3';
-        await _player.stop();
-        await _player.play(AssetSource(audioPath));
       }
       
     } catch (e) {
@@ -247,11 +312,23 @@ class AdhanSoundService {
         return;
       }
       
-      final audioPath = 'sounds/${adhanName.toLowerCase()}.mp3';
-      debugPrint('🔊 Previewing: $audioPath');
-      
+      // Set volume for preview
+      final volume = await getAdhanVolume();
+      await _previewPlayer.setVolume(volume);
       await _previewPlayer.stop();
-      await _previewPlayer.play(AssetSource(audioPath));
+      
+      // Preview using native service (same as actual playback)
+      debugPrint('🔊 Previewing adhan: $adhanName');
+      try {
+        await platform.invokeMethod('playAdhan', {
+          'prayerName': 'Preview',
+          'soundFile': adhanName,
+          'volume': volume,
+        });
+      } catch (e) {
+        debugPrint('❌ Error previewing adhan: $e');
+        rethrow;
+      }
       
     } catch (e) {
       debugPrint('❌ Error previewing adhan: $e');
