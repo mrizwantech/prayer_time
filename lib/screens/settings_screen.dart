@@ -4,9 +4,11 @@ import '../core/time_format_settings.dart';
 import '../core/calculation_method_settings.dart';
 import '../core/prayer_time_service.dart';
 import '../core/app_theme_settings.dart';
+import '../core/prayer_font_settings.dart';
 import 'notification_settings_screen.dart';
 import 'adhan_settings_screen.dart';
 import 'calculation_method_screen.dart';
+import 'monthly_calendar_screen.dart';
 import '../presentation/widgets/app_header.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -18,6 +20,7 @@ class SettingsScreen extends StatelessWidget {
     final prayerService = Provider.of<PrayerTimeService>(context);
     final calculationMethodSettings = Provider.of<CalculationMethodSettings>(context);
     final themeSettings = Provider.of<AppThemeSettings>(context);
+    final fontSettings = Provider.of<PrayerFontSettings>(context);
     
     return Scaffold(
       body: SafeArea(
@@ -88,6 +91,44 @@ class SettingsScreen extends StatelessWidget {
                         }
                       }
                     },
+                  ),
+                  Divider(),
+
+                  // Monthly Prayer Calendar
+                  ListTile(
+                    leading: Icon(Icons.calendar_month, color: Colors.deepPurple),
+                    title: const Text('Monthly Prayer Calendar'),
+                    subtitle: const Text('View dates with daily prayer times'),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const MonthlyCalendarScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  Divider(),
+
+                  // Prayer Font Size
+                  ListTile(
+                    leading: Icon(Icons.format_size, color: Colors.deepPurple),
+                    title: const Text('Prayer Font Size'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${(fontSettings.scale * 100).round()}%'),
+                        Slider(
+                          value: fontSettings.scale,
+                          min: PrayerFontSettings.minScale,
+                          max: PrayerFontSettings.maxScale,
+                          divisions: 7,
+                          label: '${(fontSettings.scale * 100).round()}%',
+                          onChanged: (val) => fontSettings.setScale(val),
+                        ),
+                      ],
+                    ),
                   ),
                   Divider(),
                   

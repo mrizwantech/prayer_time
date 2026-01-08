@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
 import 'dart:convert';
 import '../presentation/widgets/app_header.dart';
+import '../core/prayer_time_service.dart';
 
 class TasbeehScreen extends StatefulWidget {
   const TasbeehScreen({super.key});
@@ -616,7 +618,15 @@ class _TasbeehScreenState extends State<TasbeehScreen>
         child: Column(
           children: [
             // App Header - same as home screen
-            AppHeader(title: 'Tasbeeh', showLocation: false),
+            Consumer<PrayerTimeService>(
+              builder: (context, prayerService, _) => AppHeader(
+                city: prayerService.city,
+                state: prayerService.state,
+                isLoading: prayerService.isLoading,
+                onRefresh: () => prayerService.refresh(),
+                showLocation: true,
+              ),
+            ),
 
             const SizedBox(height: 16),
 

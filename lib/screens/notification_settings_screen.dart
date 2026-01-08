@@ -45,7 +45,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
         debugPrint('Error checking battery optimization: $e');
       }
       
-      // Check overlay permission (required for auto-launch on Android 10+)
+      // Check overlay permission (optional; only needed if FSI fails)
       bool overlayGranted = false;
       try {
         overlayGranted = await platform.invokeMethod('canDrawOverlays');
@@ -108,7 +108,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Permission Status
-                    if (!_permissionsGranted || !_batteryOptimizationDisabled || !_overlayPermissionGranted) ...[
+                    if (!_permissionsGranted || !_batteryOptimizationDisabled) ...[
                       Card(
                         color: Colors.red.shade50,
                         child: Padding(
@@ -135,7 +135,7 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                                 '• You may not receive prayer time alerts\n'
                                 '• Notifications may be delayed or blocked\n'
                                 '• Adhan player may not open automatically\n\n'
-                                'Please enable all permissions below for the best experience.',
+                                'Please enable the required permissions below. Overlay is optional and only needed if the adhan screen does not appear.',
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.red.shade800,
@@ -223,9 +223,23 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
               action: _batteryOptimizationDisabled ? null : () => _requestBatteryOptimization(),
               actionLabel: 'Disable',
             ),
+                    _buildChecklistItem(
+              '4. Keep App in Recent Apps',
+              'Don\'t swipe away the app from recent apps list',
+              Icons.apps,
+              false,
+            ),
+
+            SizedBox(height: 16),
+
+            Text(
+              'Optional',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
             _buildChecklistItem(
-              '4. Display Over Other Apps',
-              'Allows the Adhan player screen to appear automatically when prayer time arrives, even if using another app.',
+              'Display Over Other Apps (Optional)',
+              'Only enable if the adhan screen fails to pop over other apps. It helps launch the adhan player on some devices.',
               Icons.picture_in_picture,
               _overlayPermissionGranted,
               action: _overlayPermissionGranted ? null : () async {
@@ -238,12 +252,6 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                 }
               },
               actionLabel: 'Allow',
-            ),
-            _buildChecklistItem(
-              '5. Keep App in Recent Apps',
-              'Don\'t swipe away the app from recent apps list',
-              Icons.apps,
-              false,
             ),
 
             SizedBox(height: 24),

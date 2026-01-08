@@ -12,21 +12,30 @@ class AdhanAlarmReceiver : BroadcastReceiver() {
         
         val prayerName = intent.getStringExtra("prayerName") ?: "Prayer"
         val soundFile = intent.getStringExtra("soundFile") ?: "fajr"
-        val isIsha = intent.getBooleanExtra("isIsha", false)
         
-        Log.d("AdhanAlarmReceiver", "Prayer: $prayerName, Sound: $soundFile, isIsha: $isIsha")
+        Log.d("AdhanAlarmReceiver", "Prayer: $prayerName, Sound: $soundFile")
         
         // Get saved adhan volume from Flutter SharedPreferences
         // Flutter stores doubles as strings in SharedPreferences
         val flutterPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-        val volume = try {
-            // Try reading as float first (in case it was set natively)
-            flutterPrefs.getFloat("flutter.adhan_volume", 1.0f)
-        } catch (e: ClassCastException) {
-            // Flutter stores doubles as strings, so parse it
-            val volumeStr = flutterPrefs.getString("flutter.adhan_volume", "1.0")
-            volumeStr?.toFloatOrNull() ?: 1.0f
+
+        fun parseVolume(raw: Any?): Float? {
+            return when (raw) {
+                is Float -> raw
+                is Double -> raw.toFloat()
+                is Int -> raw.toFloat()
+                is Long -> java.lang.Double.longBitsToDouble(raw).toFloat()
+                is String -> {
+                    // shared_preferences may persist doubles as a prefixed string
+                    val match = Regex("-?\\d+(?:\\.\\d+)?").findAll(raw).lastOrNull()
+                    match?.value?.toFloatOrNull() ?: raw.toFloatOrNull()
+                }
+                else -> raw?.toString()?.toFloatOrNull()
+            }
         }
+
+        val rawVolume = flutterPrefs.all["flutter.adhan_volume"] ?: flutterPrefs.all["adhan_volume"]
+        val volume = parseVolume(rawVolume) ?: 1.0f
         Log.d("AdhanAlarmReceiver", "Adhan volume: $volume")
         
         // Start the adhan service - it will play sound AND launch the activity
@@ -45,35 +54,11 @@ class AdhanAlarmReceiver : BroadcastReceiver() {
         
         Log.d("AdhanAlarmReceiver", "✅ Foreground service started")
         
-        // If this is Isha prayer, trigger rescheduling for tomorrow
-        if (isIsha) {
-            Log.d("AdhanAlarmReceiver", "🌙 Isha prayer - scheduling tomorrow's prayers")
-            triggerReschedule(context)
-        }
-    }
-    
-    private fun triggerReschedule(context: Context) {
+        // Schedule the next prayer immediately after receiving this one
         try {
-            // Set a flag in SharedPreferences to indicate reschedule is needed
-            val prefs = context.getSharedPreferences("adhan_prefs", Context.MODE_PRIVATE)
-            prefs.edit()
-                .putBoolean("needs_reschedule", true)
-                .putLong("reschedule_requested_at", System.currentTimeMillis())
-                .apply()
-            
-            Log.d("AdhanAlarmReceiver", "📅 Reschedule flag set - will reschedule when app opens or via WorkManager")
-            
-            // Start the reschedule service to do it immediately in background
-            val rescheduleIntent = Intent(context, RescheduleService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(rescheduleIntent)
-            } else {
-                context.startService(rescheduleIntent)
-            }
-            
-            Log.d("AdhanAlarmReceiver", "✅ RescheduleService started")
+            PrayerScheduler.scheduleNextPrayer(context)
         } catch (e: Exception) {
-            Log.e("AdhanAlarmReceiver", "❌ Error triggering reschedule: ${e.message}")
+            Log.e("AdhanAlarmReceiver", "❌ Error scheduling next prayer: ${e.message}")
         }
     }
 }

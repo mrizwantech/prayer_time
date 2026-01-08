@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:adhan/adhan.dart';
 import 'package:geolocator/geolocator.dart';
@@ -165,26 +167,63 @@ class PrayerTimeService extends ChangeNotifier {
     // Try last known position first for instant load
     Position? position = await Geolocator.getLastKnownPosition();
     debugPrint('📍 Last known: ${position?.latitude}, ${position?.longitude}');
-    
+
+    // If no last known, try a fresh lookup with a longer timeout
     if (position == null) {
-      debugPrint('📍 Getting current position...');
-      position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.lowest,
-          timeLimit: Duration(seconds: 5),
-        ),
-      );
+      try {
+        debugPrint('📍 Getting current position...');
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.lowest,
+            timeLimit: Duration(seconds: 8),
+          ),
+        );
+      } on TimeoutException catch (_) {
+        debugPrint('⏳ Location request timed out - trying stored fallback');
+      } catch (e) {
+        debugPrint('❌ Error getting current position: $e');
+      }
     }
-    
+
+    // Fallback to stored coordinates if GPS lookup fails
+    if (position == null) {
+      final stored = await _loadLocationFromPrefs();
+      if (stored != null) {
+        _latitude = stored['lat'];
+        _longitude = stored['lng'];
+        debugPrint('📍 Using stored location: $_latitude, $_longitude');
+        _fetchCityState();
+        return;
+      }
+    }
+
+    if (position == null) {
+      throw Exception('Could not get location');
+    }
+
     _latitude = position.latitude;
     _longitude = position.longitude;
     debugPrint('📍 Got location: $_latitude, $_longitude');
-    
+
     // Save location to SharedPreferences for native rescheduling
     await _saveLocationToPrefs();
-    
+
     // Fetch city/state in background (don't block)
     _fetchCityState();
+  }
+
+  Future<Map<String, double>?> _loadLocationFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lat = prefs.getDouble('latitude');
+      final lng = prefs.getDouble('longitude');
+      if (lat != null && lng != null) {
+        return {'lat': lat, 'lng': lng};
+      }
+    } catch (e) {
+      debugPrint('❌ Error reading stored location: $e');
+    }
+    return null;
   }
   
   /// Save location to SharedPreferences for native Android rescheduling service
@@ -268,6 +307,14 @@ class PrayerTimeService extends ChangeNotifier {
       latitude: _latitude,
       longitude: _longitude,
     );
+
+    // Schedule silent Tahajjud reminder before Fajr (no adhan)
+    if (_prayerTimes != null) {
+      await notificationService.scheduleTahajjudNotification(
+        ishaTime: _prayerTimes!.isha,
+        fajrTime: _prayerTimes!.fajr,
+      );
+    }
     
     _lastScheduledDate = now;
     debugPrint('✅ Notifications scheduled');
@@ -343,6 +390,25 @@ class PrayerTimeService extends ChangeNotifier {
     return {
       'name': 'Fajr',
       'time': _prayerTimes!.fajr.add(const Duration(days: 1)),
+    };
+  }
+
+  /// Compute prayer times for an arbitrary date using current location and method.
+  Map<String, DateTime>? getPrayerTimesForDate(DateTime date) {
+    if (_latitude == null || _longitude == null) return null;
+
+    final params = _calculationMethodSettings?.getParameters()
+        ?? CalculationMethod.north_america.getParameters();
+    final coordinates = Coordinates(_latitude!, _longitude!);
+    final components = DateComponents.from(date);
+    final pt = PrayerTimes(coordinates, components, params);
+    return {
+      'Fajr': pt.fajr,
+      'Sunrise': pt.sunrise,
+      'Dhuhr': pt.dhuhr,
+      'Asr': pt.asr,
+      'Maghrib': pt.maghrib,
+      'Isha': pt.isha,
     };
   }
   

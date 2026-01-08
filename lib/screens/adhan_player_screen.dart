@@ -38,10 +38,7 @@ class _AdhanPlayerScreenState extends State<AdhanPlayerScreen> {
 
   @override
   void dispose() {
-    // Stop adhan when screen closes - fire and forget
-    _soundService.stopAdhan().catchError((e) {
-      debugPrint('Error stopping adhan on dispose: $e');
-    });
+    // Do not auto-stop on dispose; allow foreground service to keep playing
     super.dispose();
   }
 

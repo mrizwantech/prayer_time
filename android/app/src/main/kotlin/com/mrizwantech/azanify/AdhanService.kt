@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import android.graphics.BitmapFactory
 import androidx.core.app.NotificationCompat
 
 class AdhanService : Service() {
@@ -90,7 +91,8 @@ class AdhanService : Service() {
                 resumeAdhan()
             }
         }
-        return START_NOT_STICKY
+            // Keep service alive if system kills it during playback.
+            return START_STICKY
     }
     
     private fun pauseAdhan() {
@@ -162,7 +164,7 @@ class AdhanService : Service() {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setUsage(AudioAttributes.USAGE_ALARM)
                         .build()
                 )
                 
@@ -342,7 +344,8 @@ class AdhanService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("🕌 $prayerName Adhan")
             .setContentText("Tap to view adhan player")
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setLargeIcon(BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

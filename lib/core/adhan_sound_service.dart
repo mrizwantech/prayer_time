@@ -10,6 +10,8 @@ class AdhanSoundService {
   AdhanSoundService._internal() {
     // Listen for adhan player launch requests from native side
     platform.setMethodCallHandler(_handleNativeMethodCall);
+    // On cold starts, pull any pending launch the native side buffered
+    _checkForPendingAdhanLaunch();
   }
 
   final AudioPlayer _player = AudioPlayer();
@@ -34,6 +36,18 @@ class AdhanSoundService {
   
   void setLaunchAdhanPlayerCallback(Function(String) callback) {
     _launchAdhanPlayerCallback = callback;
+  }
+
+  Future<void> _checkForPendingAdhanLaunch() async {
+    try {
+      final pending = await platform.invokeMethod<String>('consumePendingAdhanLaunch');
+      if (pending != null && pending.isNotEmpty) {
+        debugPrint('📲 Consumed pending adhan launch for $pending');
+        _launchAdhanPlayerCallback?.call(pending);
+      }
+    } catch (e) {
+      debugPrint('❌ Error checking pending adhan launch: $e');
+    }
   }
   
   // Available audio files - users can add any MP3 file to assets/sounds/
@@ -103,7 +117,7 @@ class AdhanSoundService {
 
   // Keys for SharedPreferences
   static const String _selectedAdhanKey = 'selected_adhan';
-  static const String _adhanVolumeKey = 'adhan_volume';
+  static const String _adhanVolumeKey = 'flutter.adhan_volume';
   static const String _fajrSoundKey = 'fajr_sound_enabled';
   static const String _dhuhrSoundKey = 'dhuhr_sound_enabled';
   static const String _asrSoundKey = 'asr_sound_enabled';
@@ -113,13 +127,21 @@ class AdhanSoundService {
   /// Get adhan volume (0.0 to 1.0)
   Future<double> getAdhanVolume() async {
     final prefs = await SharedPreferences.getInstance();
+    // Migrate from legacy key without prefix if present
+    final legacy = prefs.getDouble('adhan_volume');
+    if (legacy != null) {
+      return legacy;
+    }
     return prefs.getDouble(_adhanVolumeKey) ?? 1.0;
   }
 
   /// Set adhan volume (0.0 to 1.0)
   Future<void> setAdhanVolume(double volume) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_adhanVolumeKey, volume.clamp(0.0, 1.0));
+    final clamped = volume.clamp(0.0, 1.0);
+    await prefs.setDouble(_adhanVolumeKey, clamped);
+    // Also write legacy key for backward compatibility
+    await prefs.setDouble('adhan_volume', clamped);
     debugPrint('Adhan volume set to: ${(volume * 100).toInt()}%');
   }
 

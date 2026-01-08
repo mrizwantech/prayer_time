@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -15,6 +17,7 @@ import 'core/adhan_notification_service.dart';
 import 'core/permission_manager.dart';
 import 'core/prayer_time_service.dart';
 import 'core/app_theme_settings.dart';
+import 'core/prayer_font_settings.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 // Global navigator key for navigation from anywhere
@@ -84,6 +87,7 @@ void main() async {
       child: MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => TimeFormatSettings()),
+          ChangeNotifierProvider(create: (_) => PrayerFontSettings()),
           ChangeNotifierProvider.value(value: calculationMethodSettings),
           ChangeNotifierProvider.value(value: prayerTimeService),
           ChangeNotifierProvider.value(value: appThemeSettings),
@@ -174,6 +178,7 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
   bool _isLoading = true;
   String _statusMessage = 'Initializing...';
   CalculationMethodSettings? _settings;
+  Timer? _adhanWaitTimer;
 
   @override
   void initState() {
@@ -238,25 +243,48 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
       );
       await prayerTimeService.initialize();
 
-      // Step 3: Done - navigate to main screen
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainNavigation()),
-        );
+      // If an adhan launch is pending/active, stay put so we don't pop to home
+      final notificationService = AdhanNotificationService();
+      if (notificationService.isAdhanPlayerActive || notificationService.hasPendingAdhanLaunch) {
+        _startAdhanWait();
+        return;
       }
+
+      // Step 3: Done - navigate to main screen
+      _goToMain();
     } catch (e) {
       debugPrint('Error during startup: $e');
       // Still proceed to main screen even if there's an error
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainNavigation()),
-        );
-      }
+      _goToMain();
     }
+  }
+
+  void _startAdhanWait() {
+    _adhanWaitTimer?.cancel();
+    setState(() {
+      _isLoading = true;
+      _statusMessage = 'Waiting for adhan to finish...';
+    });
+
+    _adhanWaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      final notificationService = AdhanNotificationService();
+      if (!notificationService.isAdhanPlayerActive && !notificationService.hasPendingAdhanLaunch) {
+        timer.cancel();
+        _goToMain();
+      }
+    });
+  }
+
+  void _goToMain() {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const MainNavigation()),
+    );
   }
 
   @override
   void dispose() {
+    _adhanWaitTimer?.cancel();
     _settings?.removeListener(_onMethodSelected);
     super.dispose();
   }
@@ -377,7 +405,9 @@ class _FirstTimeSetupWrapperState extends State<FirstTimeSetupWrapper> {
 }
 
 class MainNavigation extends StatefulWidget {
-  const MainNavigation({super.key});
+  final int initialIndex;
+
+  const MainNavigation({super.key, this.initialIndex = 0});
 
   @override
   State<MainNavigation> createState() => _MainNavigationState();
@@ -396,6 +426,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
+    selectedIndex = widget.initialIndex;
     // Request all permissions on app launch
     _requestAllPermissions();
   }

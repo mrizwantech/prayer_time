@@ -56,11 +56,11 @@ class RescheduleService : Service() {
         
         // Get stored location and settings
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-        
-        // Flutter's SharedPreferences stores doubles as Long bits
-        // We need to convert them back to double
-        val latitudeLong = prefs.getLong("flutter.latitude", 0L)
-        val longitudeLong = prefs.getLong("flutter.longitude", 0L)
+
+        // Flutter writes doubles as raw long bits; keys are `latitude`/`longitude` (no flutter. prefix)
+        // Fallback to old keys if present to avoid silently missing location.
+        val latitudeLong = prefs.getLong("latitude", prefs.getLong("flutter.latitude", 0L))
+        val longitudeLong = prefs.getLong("longitude", prefs.getLong("flutter.longitude", 0L))
         
         val latitude = java.lang.Double.longBitsToDouble(latitudeLong)
         val longitude = java.lang.Double.longBitsToDouble(longitudeLong)
@@ -97,27 +97,23 @@ class RescheduleService : Service() {
         // Get the selected adhan sound
         val soundFile = prefs.getString("flutter.selected_adhan", "fajr") ?: "fajr"
         
-        // Schedule alarms for tomorrow's prayers
-        // Use IDs 200-204 for tomorrow to avoid conflicts with today's (100-104)
-        scheduleAlarm("Fajr", soundFile, prayerTimes.fajr.time, 200, false)
-        scheduleAlarm("Dhuhr", soundFile, prayerTimes.dhuhr.time, 201, false)
-        scheduleAlarm("Asr", soundFile, prayerTimes.asr.time, 202, false)
-        scheduleAlarm("Maghrib", soundFile, prayerTimes.maghrib.time, 203, false)
-        scheduleAlarm("Isha", soundFile, prayerTimes.isha.time, 204, true) // isIsha = true
-        
-        // Also schedule day after tomorrow's prayers (IDs 300-304)
-        val dayAfterTomorrow = Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_YEAR, 2)
+        // Pick the very next prayer only (single exact alarm for reliability)
+        val tomorrowPrayers = listOf(
+            "Fajr" to prayerTimes.fajr.time,
+            "Dhuhr" to prayerTimes.dhuhr.time,
+            "Asr" to prayerTimes.asr.time,
+            "Maghrib" to prayerTimes.maghrib.time,
+            "Isha" to prayerTimes.isha.time
+        )
+
+        val now = System.currentTimeMillis()
+        val nextPrayer = tomorrowPrayers.firstOrNull { it.second > now }
+
+        if (nextPrayer != null) {
+            scheduleAlarm(nextPrayer.first, soundFile, nextPrayer.second, 6000)
+        } else {
+            Log.w(TAG, "⚠️ No upcoming prayer found to schedule")
         }
-        val dayAfterComponents = DateComponents.from(dayAfterTomorrow.time)
-        val dayAfterTimes = PrayerTimes(coordinates, dayAfterComponents, params)
-        
-        Log.d(TAG, "🕌 Day after tomorrow's prayer times calculated:")
-        scheduleAlarm("Fajr", soundFile, dayAfterTimes.fajr.time, 300, false)
-        scheduleAlarm("Dhuhr", soundFile, dayAfterTimes.dhuhr.time, 301, false)
-        scheduleAlarm("Asr", soundFile, dayAfterTimes.asr.time, 302, false)
-        scheduleAlarm("Maghrib", soundFile, dayAfterTimes.maghrib.time, 303, false)
-        scheduleAlarm("Isha", soundFile, dayAfterTimes.isha.time, 304, true)
         
         // Clear the reschedule flag
         val adhanPrefs = getSharedPreferences("adhan_prefs", Context.MODE_PRIVATE)
@@ -149,7 +145,7 @@ class RescheduleService : Service() {
         }
     }
     
-    private fun scheduleAlarm(prayerName: String, soundFile: String, triggerTime: Long, requestCode: Int, isIsha: Boolean) {
+    private fun scheduleAlarm(prayerName: String, soundFile: String, triggerTime: Long, requestCode: Int) {
         // Check if this prayer's sound is enabled
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         val soundEnabled = prefs.getBoolean("flutter.${prayerName.lowercase()}_sound_enabled", true)
@@ -166,11 +162,15 @@ class RescheduleService : Service() {
         }
         
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            Log.e(TAG, "⚠️ Exact alarm permission not granted; skipping $prayerName at $triggerTime")
+            return
+        }
         
         val intent = Intent(this, AdhanAlarmReceiver::class.java).apply {
             putExtra("prayerName", prayerName)
             putExtra("soundFile", soundFile)
-            putExtra("isIsha", isIsha)
         }
         
         val pendingIntent = PendingIntent.getBroadcast(
@@ -196,7 +196,7 @@ class RescheduleService : Service() {
         }
         
         val calendar = Calendar.getInstance().apply { timeInMillis = triggerTime }
-        Log.d(TAG, "⏰ Scheduled $prayerName at ${calendar.time} (requestCode: $requestCode, isIsha: $isIsha)")
+        Log.d(TAG, "⏰ Scheduled $prayerName at ${calendar.time} (requestCode: $requestCode)")
     }
     
     private fun createNotificationChannel() {

@@ -19,6 +19,7 @@ class MainActivity : FlutterActivity() {
     private val ADHAN_CHANNEL = "com.mrizwantech.azanify/adhan"
     private val ALARM_CHANNEL = "com.mrizwantech.azanify/adhan_alarm"
     private var adhanChannel: MethodChannel? = null
+    private var pendingAdhanLaunch: String? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -85,6 +86,12 @@ class MainActivity : FlutterActivity() {
                     resumeAdhan()
                     result.success(null)
                 }
+                "consumePendingAdhanLaunch" -> {
+                    val pending = pendingAdhanLaunch
+                    Log.d("MainActivity", "consumePendingAdhanLaunch -> $pending")
+                    pendingAdhanLaunch = null
+                    result.success(pending)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -98,10 +105,13 @@ class MainActivity : FlutterActivity() {
                     val soundFile = call.argument<String>("soundFile") ?: "fajr"
                     val triggerTime = call.argument<Long>("triggerTime") ?: 0L
                     val requestCode = call.argument<Int>("requestCode") ?: 0
-                    val isIsha = call.argument<Boolean>("isIsha") ?: false
-                    
-                    Log.d("MainActivity", "Scheduling adhan alarm for $prayerName at $triggerTime (isIsha: $isIsha)")
-                    scheduleAdhanAlarm(prayerName, soundFile, triggerTime, requestCode, isIsha)
+                    Log.d("MainActivity", "Scheduling adhan alarm (legacy) for $prayerName at $triggerTime")
+                    scheduleAdhanAlarm(prayerName, soundFile, triggerTime, requestCode)
+                    result.success(null)
+                }
+                "scheduleNextPrayer" -> {
+                    Log.d("MainActivity", "Request from Flutter: scheduleNextPrayer")
+                    PrayerScheduler.scheduleNextPrayer(this)
                     result.success(null)
                 }
                 "cancelAllAlarms" -> {
@@ -116,8 +126,11 @@ class MainActivity : FlutterActivity() {
     
     private fun cancelAllAlarms() {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        // Cancel alarms for request codes 99-110 (sunrise + 5 prayers + buffer)
-        for (requestCode in 99..110) {
+
+        // Legacy range (per-prayer) plus current single alarm ids
+        val requestCodes = (99..110).toSet() + setOf(5000, 6000)
+
+        for (requestCode in requestCodes) {
             val intent = Intent(this, AdhanAlarmReceiver::class.java)
             val pendingIntent = PendingIntent.getBroadcast(
                 this,
@@ -142,12 +155,23 @@ class MainActivity : FlutterActivity() {
         
         if (autoLaunch && prayerName != null) {
             Log.d("MainActivity", "📱 Auto-launching adhan player for $prayerName")
-            // Delay slightly to ensure Flutter is ready
-            window.decorView.postDelayed({
-                Log.d("MainActivity", "📱 Invoking launchAdhanPlayer method on Flutter")
-                adhanChannel?.invokeMethod("launchAdhanPlayer", mapOf("prayerName" to prayerName))
-            }, 500)
+            pendingAdhanLaunch = prayerName
+            // Try to send immediately; Flutter can also pull via consumePendingAdhanLaunch
+            maybeSendPendingAdhanLaunch()
         }
+    }
+
+    private fun maybeSendPendingAdhanLaunch() {
+        val prayerName = pendingAdhanLaunch ?: return
+        window.decorView.postDelayed({
+            try {
+                Log.d("MainActivity", "📱 Attempting to deliver pending adhan launch for $prayerName")
+                adhanChannel?.invokeMethod("launchAdhanPlayer", mapOf("prayerName" to prayerName))
+                pendingAdhanLaunch = null
+            } catch (e: Exception) {
+                Log.e("MainActivity", "❌ Failed to deliver pending adhan launch: ${e.message}")
+            }
+        }, 500)
     }
     
     override fun onNewIntent(intent: Intent) {
@@ -156,13 +180,17 @@ class MainActivity : FlutterActivity() {
         handleAdhanLaunch()
     }
     
-    private fun scheduleAdhanAlarm(prayerName: String, soundFile: String, triggerTime: Long, requestCode: Int, isIsha: Boolean = false) {
+    private fun scheduleAdhanAlarm(prayerName: String, soundFile: String, triggerTime: Long, requestCode: Int) {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            Log.e("MainActivity", "⚠️ Exact alarm permission not granted; cannot schedule $prayerName")
+            return
+        }
         
         val intent = Intent(this, AdhanAlarmReceiver::class.java).apply {
             putExtra("prayerName", prayerName)
             putExtra("soundFile", soundFile)
-            putExtra("isIsha", isIsha)
         }
         
         val pendingIntent = PendingIntent.getBroadcast(
@@ -187,7 +215,7 @@ class MainActivity : FlutterActivity() {
             )
         }
         
-        Log.d("MainActivity", "Adhan alarm scheduled for $prayerName at $triggerTime (requestCode: $requestCode, isIsha: $isIsha)")
+        Log.d("MainActivity", "Adhan alarm scheduled for $prayerName at $triggerTime (requestCode: $requestCode)")
     }
 
     private fun playAdhan(prayerName: String, soundFile: String, volume: Float = 1.0f) {

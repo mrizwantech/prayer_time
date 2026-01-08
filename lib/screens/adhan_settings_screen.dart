@@ -171,6 +171,41 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
     );
   }
 
+  Future<void> _showDebugStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final resolvedVolume = await _soundService.getAdhanVolume();
+    final resolvedAdhan = await _soundService.getSelectedAdhan();
+    final rawFlutterVol = prefs.get('flutter.adhan_volume');
+    final rawLegacyVol = prefs.get('adhan_volume');
+    final rawSelected = prefs.getString('selected_adhan');
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Adhan Storage Debug'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Resolved volume: ${(resolvedVolume * 100).toStringAsFixed(0)}%'),
+            Text('Resolved adhan: $resolvedAdhan'),
+            const SizedBox(height: 8),
+            Text('Raw flutter.adhan_volume: $rawFlutterVol'),
+            Text('Raw adhan_volume: $rawLegacyVol'),
+            Text('Raw selected_adhan: $rawSelected'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAdhanPicker() {
     return StatefulBuilder(
       builder: (context, setModalState) => Container(
@@ -639,6 +674,17 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                         Text(
                           'Controls adhan volume independently of device volume',
                           style: TextStyle(color: _subtitleColor, fontSize: 11),
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _showDebugStorage,
+                            style: TextButton.styleFrom(
+                              foregroundColor: _accentColor,
+                            ),
+                            child: const Text('Debug: Show stored values'),
+                          ),
                         ),
                       ],
                     ),
