@@ -97,13 +97,12 @@ class AdhanNotificationService {
     
     // Play adhan sound for notification
     final payload = response.payload?.split('|');
-    if (payload != null && payload.isNotEmpty) {
-      final prayerName = payload[0];
+    final prayerName = payload != null && payload.isNotEmpty ? payload[0] : null;
+    if (prayerName != null) {
       final soundService = AdhanSoundService();
       soundService.playAdhan(prayerName);
     }
-    
-    // Handle snooze in background
+
     if (response.actionId == 'snooze') {
       debugPrint('Background snooze detected!');
       final soundService = AdhanSoundService();
@@ -280,10 +279,13 @@ class AdhanNotificationService {
   Future<void> scheduleTahajjudNotification({
     required DateTime ishaTime,
     required DateTime fajrTime,
+    bool isRamadan = false,
     Duration offset = const Duration(minutes: 90),
   }) async {
+    // During Ramadan, nudge closer to Fajr as a suhoor ending reminder
+    final effectiveOffset = isRamadan ? const Duration(minutes: 45) : offset;
     // Place reminder offset minutes before Fajr, but after Isha, and only if still future.
-    var target = fajrTime.subtract(offset);
+    var target = fajrTime.subtract(effectiveOffset);
     if (target.isBefore(ishaTime)) {
       target = ishaTime.add(const Duration(minutes: 5));
     }
@@ -295,12 +297,17 @@ class AdhanNotificationService {
     }
 
     final scheduledTime = tz.TZDateTime.from(target, tz.local);
-    debugPrint('🕐 Scheduling Tahajjud reminder at $scheduledTime (offset: ${offset.inMinutes}m before Fajr)');
+    debugPrint('🕐 Scheduling Tahajjud reminder at $scheduledTime (offset: ${effectiveOffset.inMinutes}m before Fajr)');
+
+    final title = isRamadan ? 'Suhoor ending soon' : 'Tahajjud Reminder';
+    final body = isRamadan
+        ? 'Wrap up suhoor before Fajr.'
+        : 'Time for night prayer (no adhan).';
 
     await _notifications.zonedSchedule(
       910, // dedicated id for Tahajjud
-      'Tahajjud Reminder',
-      'Time for night prayer (no adhan).',
+      title,
+      body,
       scheduledTime,
       NotificationDetails(
         android: AndroidNotificationDetails(
@@ -323,6 +330,195 @@ class AdhanNotificationService {
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: 'Tahajjud',
+    );
+  }
+
+  /// Schedule repeating Suhoor reminders (adhan sound) from start window until Fajr.
+  Future<void> scheduleSuhoorRepeatingReminders({
+    required DateTime fajrTime,
+    required int startMinutesBeforeFajr,
+    required int intervalMinutes,
+  }) async {
+    final start = fajrTime.subtract(Duration(minutes: startMinutesBeforeFajr));
+    final now = DateTime.now();
+    var cursor = start.isBefore(now) ? now : start;
+
+    // Align cursor to nearest interval step from start
+    final elapsedFromStart = cursor.difference(start).inMinutes;
+    final remainder = elapsedFromStart % intervalMinutes;
+    if (remainder != 0) {
+      cursor = cursor.add(Duration(minutes: intervalMinutes - remainder));
+    }
+
+    final reminders = <DateTime>[];
+    while (cursor.isBefore(fajrTime)) {
+      reminders.add(cursor);
+      cursor = cursor.add(Duration(minutes: intervalMinutes));
+    }
+
+    if (reminders.isEmpty) {
+      debugPrint('⏭️ No suhoor reminders to schedule (window passed)');
+      return;
+    }
+
+    debugPrint('🕐 Scheduling ${reminders.length} suhoor reminders (interval $intervalMinutes m)');
+    int id = 930; // id range for suhoor repeats
+    for (final time in reminders) {
+      final scheduledTime = tz.TZDateTime.from(time, tz.local);
+      await _notifications.zonedSchedule(
+        id,
+        'Suhoor reminder',
+        'Wrap up suhoor before Fajr.',
+        scheduledTime,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channelId,
+            _channelName,
+            channelDescription: _channelDescription,
+            importance: Importance.high,
+            priority: Priority.high,
+            playSound: true,
+            enableVibration: true,
+            autoCancel: true,
+            category: AndroidNotificationCategory.reminder,
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: 'Suhoor',
+      );
+      id++;
+    }
+  }
+
+  /// Schedule a single Iftar alert before Maghrib.
+  Future<void> scheduleIftarReminder({
+    required DateTime maghribTime,
+    required int minutesBeforeMaghrib,
+  }) async {
+    final target = maghribTime.subtract(Duration(minutes: minutesBeforeMaghrib));
+    if (!target.isAfter(DateTime.now())) {
+      debugPrint('⏭️ Skipping Iftar reminder - time passed');
+      return;
+    }
+
+    final scheduledTime = tz.TZDateTime.from(target, tz.local);
+    debugPrint('🕐 Scheduling Iftar reminder at $scheduledTime');
+
+    await _notifications.zonedSchedule(
+      940, // dedicated id for iftar alert
+      'Iftar dua',
+      'Allahumma inni laka sumtu wa bika aamantu wa alayka tawakkaltu wa ala rizqika aftartu.',
+      scheduledTime,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          autoCancel: true,
+          category: AndroidNotificationCategory.reminder,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      payload: 'Iftar',
+    );
+  }
+
+  /// Single Suhoor dua reminder 5 minutes before Fajr.
+  Future<void> scheduleSuhoorDuaReminder({
+    required DateTime fajrTime,
+  }) async {
+    final target = fajrTime.subtract(const Duration(minutes: 5));
+    if (!target.isAfter(DateTime.now())) {
+      debugPrint('⏭️ Skipping Suhoor dua reminder - time passed');
+      return;
+    }
+
+    final scheduledTime = tz.TZDateTime.from(target, tz.local);
+    debugPrint('🕐 Scheduling Suhoor dua reminder at $scheduledTime');
+
+    await _notifications.zonedSchedule(
+      941, // dedicated id for suhoor dua
+      'Suhoor dua',
+      'Wa bisawmi ghadin nawaitu min shahri Ramadan.',
+      scheduledTime,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          autoCancel: true,
+          category: AndroidNotificationCategory.reminder,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      payload: 'SuhoorDua',
+    );
+  }
+
+  /// Schedule Taraweeh reminder after Isha during Ramadan (silent).
+  Future<void> scheduleTaraweehReminder({
+    required DateTime ishaTime,
+    Duration offset = const Duration(minutes: 10),
+  }) async {
+    final now = DateTime.now();
+    var target = ishaTime.add(offset);
+    if (!target.isAfter(now)) {
+      debugPrint('⏭️ Skipping Taraweeh reminder - time already passed ($target)');
+      return;
+    }
+
+    final scheduledTime = tz.TZDateTime.from(target, tz.local);
+    debugPrint('🕐 Scheduling Taraweeh reminder at $scheduledTime');
+
+    await _notifications.zonedSchedule(
+      911, // dedicated id for Taraweeh
+      'Taraweeh time',
+      'Let\'s begin Taraweeh after Isha.',
+      scheduledTime,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: false,
+          enableVibration: true,
+          fullScreenIntent: false,
+          category: AndroidNotificationCategory.reminder,
+          autoCancel: true,
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: false,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      payload: 'Taraweeh',
     );
   }
 

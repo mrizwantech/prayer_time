@@ -229,7 +229,7 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
         const double center = size / 2;
         const double nodeRadius = 32;
 
-        final themeProvider = PrayerThemeProvider();
+        final themeProvider = Provider.of<PrayerThemeProvider>(context);
         final currentTheme = themeProvider.getCurrentTheme(prayers[currentIndex]['name']);
         
         // Get dates
@@ -245,19 +245,6 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
         final todaysEvents = IslamicEventsManager.getTodaysEvents();
         final isRamadan = _isRamadan;
         
-        // Calculate next prayer index
-        final nextIndex = (() {
-          int idx = actualCurrentIndex + 1;
-          for (int i = 0; i < prayers.length; i++) {
-            final name = prayers[idx % prayers.length]['name'] as String;
-            if (name != 'Tahajjud (Qiyam-u-lail)') {
-              return idx % prayers.length;
-            }
-            idx++;
-          }
-          return (actualCurrentIndex + 1) % prayers.length;
-        })();
-
         return Consumer<PrayerFontSettings>(
           builder: (context, fontSettings, _) {
             final fs = fontSettings.scale;
@@ -307,8 +294,6 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                     builder: (context, timeSettings, _) {
                       final timeFormat = timeSettings.is24Hour ? 'HH:mm' : 'hh:mm a';
                       final currentTime = DateFormat(timeFormat).format(now);
-                      final nextPrayerName = prayers[nextIndex]['name'] as String;
-                      final nextPrayerTime = _formatTime(prayers[nextIndex]['time'], timeSettings.is24Hour);
                       return Column(
                         children: [
                           if (isRamadan)
@@ -354,67 +339,25 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                               ),
                             ),
                           Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            currentTime,
-                            style: TextStyle(
-                              color: currentTheme.textColor,
-                              fontSize: 32 * fs,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black.withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                currentTime,
+                                style: TextStyle(
+                                  color: currentTheme.textColor,
+                                  fontSize: 32 * fs,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black.withOpacity(0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Flexible(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: Colors.white.withOpacity(0.2)),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Next',
-                                    style: TextStyle(
-                                      color: currentTheme.textColor.withOpacity(0.7),
-                                      fontSize: 11 * fs,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  Text(
-                                    nextPrayerName,
-                                    style: TextStyle(
-                                      color: currentTheme.textColor,
-                                      fontSize: 15 * fs,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    nextPrayerTime,
-                                    style: TextStyle(
-                                      color: currentTheme.textColor.withOpacity(0.9),
-                                      fontSize: 13 * fs,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                            ],
                           ),
                         ],
                       );
@@ -429,14 +372,10 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           // Moon phase
-                          Transform(
-                            alignment: Alignment.center,
-                            transform: Matrix4.rotationY(3.14159),
-                            child: Icon(
-                              _getMoonIcon(moonPhaseName),
-                              color: currentTheme.secondaryColor,
-                              size: 16,
-                            ),
+                          Icon(
+                            _getMoonIcon(moonPhaseName),
+                            color: currentTheme.secondaryColor,
+                            size: 16,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -546,27 +485,31 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                   if (isRamadan)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _ramadanChip(
-                            label: 'Suhoor ends (Fajr)',
-                            time: _formatTime(prayerService.fajr != null
-                                ? '${prayerService.fajr!.hour.toString().padLeft(2, '0')}:${prayerService.fajr!.minute.toString().padLeft(2, '0')}'
-                                : '--:--',
-                                Provider.of<TimeFormatSettings>(context, listen: false).is24Hour),
-                            color: Colors.amber.shade200,
-                          ),
-                          const SizedBox(width: 8),
-                          _ramadanChip(
-                            label: 'Iftar (Maghrib)',
-                            time: _formatTime(prayerService.maghrib != null
-                                ? '${prayerService.maghrib!.hour.toString().padLeft(2, '0')}:${prayerService.maghrib!.minute.toString().padLeft(2, '0')}'
-                                : '--:--',
-                                Provider.of<TimeFormatSettings>(context, listen: false).is24Hour),
-                            color: Colors.teal.shade200,
-                          ),
-                        ],
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _ramadanChip(
+                              label: 'Suhoor ends (Fajr)',
+                              time: _formatTime(prayerService.fajr != null
+                                  ? '${prayerService.fajr!.hour.toString().padLeft(2, '0')}:${prayerService.fajr!.minute.toString().padLeft(2, '0')}'
+                                  : '--:--',
+                                  Provider.of<TimeFormatSettings>(context, listen: false).is24Hour),
+                              color: Colors.amber.shade200,
+                            ),
+                            _ramadanChip(
+                              label: 'Iftar (Maghrib)',
+                              time: _formatTime(prayerService.maghrib != null
+                                  ? '${prayerService.maghrib!.hour.toString().padLeft(2, '0')}:${prayerService.maghrib!.minute.toString().padLeft(2, '0')}'
+                                  : '--:--',
+                                  Provider.of<TimeFormatSettings>(context, listen: false).is24Hour),
+                              color: Colors.teal.shade200,
+                            ),
+                          ],
+                        ),
                       ),
                     )
                   else if (_currentQuote.isNotEmpty)
@@ -585,93 +528,77 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                     ),
                   const SizedBox(height: 24),
                   
-                  // Circular Timeline
-                  SizedBox(
-                    width: size,
-                    height: size,
-                    child: Stack(
-                      children: [
-                        CustomPaint(
-                          size: Size(size, size),
-                          painter: _PrayerTimelinePainter(
-                            progress: progress,
-                            prayers: prayers,
-                            currentIndex: currentIndex,
-                            actualCurrentIndex: actualCurrentIndex,
+                  // Row-based Timeline (always)
+                  Consumer<TimeFormatSettings>(
+                    builder: (context, timeSettings, _) => Column(
+                      children: prayers.map((p) {
+                        final isCurrent = prayers[currentIndex]['name'] == p['name'];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isCurrent
+                                ? currentTheme.secondaryColor.withOpacity(0.18)
+                                : Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: (isCurrent ? currentTheme.secondaryColor : Colors.white)
+                                  .withOpacity(0.16),
+                            ),
                           ),
-                        ),
-                        // Prayer nodes
-                        ...List.generate(prayers.length, (index) {
-                          final angle = (index / prayers.length) * 2 * pi - pi / 2;
-                          final x = center + radius * cos(angle);
-                          final y = center + radius * sin(angle);
-                          final isCurrent = index == currentIndex;
-                          return Positioned(
-                            left: x - nodeRadius,
-                            top: y - nodeRadius,
-                            child: Container(
-                              width: isCurrent ? nodeRadius * 2.2 : nodeRadius * 2,
-                              height: isCurrent ? nodeRadius * 2.2 : nodeRadius * 2,
-                              decoration: BoxDecoration(
-                                color: isCurrent
-                                    ? currentTheme.primaryColor
-                                    : currentTheme.cardColor.withOpacity(0.9),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: currentTheme.primaryColor.withOpacity(isCurrent ? 0.35 : 0.2),
-                                    blurRadius: isCurrent ? 22 : 12,
-                                    spreadRadius: isCurrent ? 2 : 0,
-                                  )
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    p['icon'],
+                                    style: const TextStyle(fontSize: 18),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        p['name'],
+                                        style: TextStyle(
+                                          color: currentTheme.textColor,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 15 * fs,
+                                        ),
+                                      ),
+                                      Text(
+                                        _formatTime(p['time'], timeSettings.is24Hour),
+                                        style: TextStyle(
+                                          color: currentTheme.textColor.withOpacity(0.8),
+                                          fontSize: 13 * fs,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
-                              child: Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        prayers[index]['name'],
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12 * fs,
-                                          shadows: [
-                                            Shadow(
-                                              color: Colors.black.withOpacity(0.35),
-                                              blurRadius: 6,
-                                              offset: const Offset(0, 1),
-                                            ),
-                                          ],
-                                        ),
-                                        textAlign: TextAlign.center,
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 2,
-                                      ),
+                              if (isCurrent)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: currentTheme.secondaryColor.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    'Now',
+                                    style: TextStyle(
+                                      color: currentTheme.textColor,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12 * fs,
                                     ),
-                                    Consumer<TimeFormatSettings>(
-                                      builder: (context, timeSettings, _) => Text(
-                                        _formatTime(prayers[index]['time'], timeSettings.is24Hour),
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.9),
-                                          fontSize: 10 * fs,
-                                          shadows: [
-                                            Shadow(
-                                              color: Colors.black.withOpacity(0.25),
-                                              blurRadius: 5,
-                                              offset: const Offset(0, 1),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
+                            ],
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ),
                     ],
@@ -741,22 +668,20 @@ class _PrayerTimelinePainter extends CustomPainter {
   final List<Map<String, dynamic>> prayers;
   final int currentIndex;
   final int actualCurrentIndex;
+  final PrayerTheme currentTheme;
 
   _PrayerTimelinePainter({
     required this.progress,
     required this.prayers,
     required this.currentIndex,
     required this.actualCurrentIndex,
+    required this.currentTheme,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     const double radius = 170;
-    
-    final themeProvider = PrayerThemeProvider();
-    final currentPrayerName = prayers[currentIndex]['name'];
-    final currentTheme = themeProvider.getCurrentTheme(currentPrayerName);
     
     // Background circle
     final bgPaint = Paint()

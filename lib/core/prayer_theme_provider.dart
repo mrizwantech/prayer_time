@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hijri_date/hijri_date.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PrayerTheme {
   final List<Color> backgroundGradient;
@@ -20,12 +21,48 @@ class PrayerTheme {
 }
 
 class PrayerThemeProvider extends ChangeNotifier {
+  static const String _ramadanPreviewKey = 'ramadanPreviewEnabled';
+  bool _ramadanPreviewEnabled = false;
+
+  static const PrayerTheme _defaultTheme = PrayerTheme(
+    backgroundGradient: [Color(0xFF123D3A), Color(0xFF0E4B3A), Color(0xFF0F5132)],
+    primaryColor: Color(0xFF34D399),
+    secondaryColor: Color(0xFFF5D047),
+    textColor: Color(0xFFE7F8F1),
+    cardColor: Color(0xFF0C3B2F),
+    prayerName: 'Default',
+  );
+
+  static const PrayerTheme _ramadanTheme = PrayerTheme(
+    backgroundGradient: [Color(0xFF0B3B2E), Color(0xFF0E4B3A), Color(0xFF0F5132)],
+    primaryColor: Color(0xFF34D399),
+    secondaryColor: Color(0xFFF5D047),
+    textColor: Color(0xFFE7F8F1),
+    cardColor: Color(0xFF0C3B2F),
+    prayerName: 'Ramadan',
+  );
+
+  bool get ramadanPreviewEnabled => _ramadanPreviewEnabled;
+
+  Future<void> loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    _ramadanPreviewEnabled = prefs.getBool(_ramadanPreviewKey) ?? false;
+    notifyListeners();
+  }
+
+  Future<void> setRamadanPreview(bool enabled) async {
+    _ramadanPreviewEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_ramadanPreviewKey, enabled);
+    notifyListeners();
+  }
+
   static const fajrTheme = PrayerTheme(
-    backgroundGradient: [Color(0xFF0BA360), Color(0xFF3CBA92), Color(0xFF7EE8FA)], // dawn greens
-    primaryColor: Color(0xFF2ECC71),
-    secondaryColor: Color(0xFFA0F0C0),
+    backgroundGradient: [Color(0xFF0A5B4A), Color(0xFF0E7A66), Color(0xFF1FA37D)], // deeper greens for contrast
+    primaryColor: Color(0xFF0F8A68),
+    secondaryColor: Color(0xFFF4E04D),
     textColor: Colors.white,
-    cardColor: Color(0xFF12784E),
+    cardColor: Color(0xFF0A4738),
     prayerName: 'Fajr',
   );
 
@@ -75,37 +112,13 @@ class PrayerThemeProvider extends ChangeNotifier {
   );
 
   bool get isRamadan {
-    final now = HijriDate.now();
-    return now.hMonth == 9;
+    if (_ramadanPreviewEnabled) return true;
+    final todayHijri = HijriDate.fromDate(DateTime.now());
+    return todayHijri.hMonth == 9;
   }
 
   PrayerTheme getCurrentTheme(String currentPrayer) {
-    if (isRamadan) {
-      return const PrayerTheme(
-        backgroundGradient: [Color(0xFF0B3B2E), Color(0xFF0E4B3A), Color(0xFF0F5132)],
-        primaryColor: Color(0xFF34D399),
-        secondaryColor: Color(0xFFF5D047),
-        textColor: Color(0xFFE7F8F1),
-        cardColor: Color(0xFF0C3B2F),
-        prayerName: 'Ramadan',
-      );
-    }
-    switch (currentPrayer.toLowerCase()) {
-      case 'fajr':
-        return fajrTheme;
-      case 'dhuhr':
-        return dhuhrTheme;
-      case 'asr':
-        return asrTheme;
-      case 'maghrib':
-        return maghribTheme;
-      case 'isha':
-        return ishaTheme;
-      case 'tahajjud (qiyam-u-lail)':
-      case 'tahajjud':
-        return tahajjudTheme;
-      default:
-        return ishaTheme;
-    }
+    if (isRamadan) return _ramadanTheme;
+    return _defaultTheme;
   }
 }

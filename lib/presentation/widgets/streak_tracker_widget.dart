@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../core/prayer_tracking_service.dart';
 import '../../core/achievements.dart';
 import '../../core/prayer_theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class StreakTrackerWidget extends StatefulWidget {
   const StreakTrackerWidget({Key? key}) : super(key: key);
@@ -59,7 +60,7 @@ class _StreakTrackerWidgetState extends State<StreakTrackerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = PrayerThemeProvider();
+    final themeProvider = Provider.of<PrayerThemeProvider>(context);
     final currentTheme = themeProvider.getCurrentTheme('Fajr'); // Default theme
 
     return Container(
