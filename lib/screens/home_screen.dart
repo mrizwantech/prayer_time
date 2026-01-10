@@ -6,6 +6,8 @@ import '../core/prayer_time_service.dart';
 import '../presentation/widgets/prayer_timeline.dart';
 import '../presentation/widgets/app_header.dart';
 import '../core/prayer_theme_provider.dart';
+import '../core/quran_api_client.dart';
+import 'quran_surah_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hijri_date/hijri_date.dart';
 import 'package:intl/intl.dart';
@@ -23,12 +25,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _bannerDismissed = false;
   RewardedAd? _rewardedAd;
   bool _isRewardedLoading = false;
+  SurahSummary? _lastReadSurah;
+  int? _lastReadAyah;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadBannerState();
+    _loadLastReadQuran();
     _startCountdownTimer();
     _loadRewardedAd();
   }
@@ -38,12 +43,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       debugPrint('🔄 App resumed');
-      // Check if we need to reschedule (new day or after Isha)
+      // Always ensure next prayer is scheduled when app is opened
       final prayerService = Provider.of<PrayerTimeService>(context, listen: false);
-      if (prayerService.needsReschedule()) {
-        debugPrint('📅 New day detected - rescheduling notifications');
-        prayerService.rescheduleIfNeeded();
-      }
+      prayerService.ensureNextPrayerScheduled();
       // Restart countdown timer
       _startCountdownTimer();
     }
@@ -80,22 +82,70 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _loadLastReadQuran() async {
+    final prefs = await SharedPreferences.getInstance();
+    final surahNumber = prefs.getInt('last_read_surah');
+    final ayahNumber = prefs.getInt('last_read_ayah');
+    if (surahNumber == null || ayahNumber == null) {
+      if (mounted) {
+        setState(() {
+          _lastReadSurah = null;
+          _lastReadAyah = null;
+        });
+      }
+      return;
+    }
+
+    final nameEn = prefs.getString('last_read_surah_name_en') ?? 'Surah $surahNumber';
+    final nameAr = prefs.getString('last_read_surah_name_ar') ?? '';
+    final ayahCount = prefs.getInt('last_read_surah_ayah_count') ?? 0;
+    final revelation = prefs.getString('last_read_surah_revelation') ?? 'Meccan';
+
+    final summary = SurahSummary(
+      number: surahNumber,
+      nameArabic: nameAr,
+      nameEnglish: nameEn,
+      ayahCount: ayahCount,
+      revelationType: revelation,
+    );
+
+    if (mounted) {
+      setState(() {
+        _lastReadSurah = summary;
+        _lastReadAyah = ayahNumber;
+      });
+    }
+  }
+
+  // Set to true to use Google test ads (for debugging decoder issues)
+  static const bool _useTestAds = false;
+
   String get _rewardedUnitId {
-    // Test IDs; replace with your real rewarded ad unit IDs when ready.
+    if (_useTestAds) {
+      // Google test rewarded ad (always works, no decoder issues)
+      return 'ca-app-pub-3940256099942544/5224354917';
+    }
+    // Real ad unit IDs
     return Platform.isIOS
-        ? 'ca-app-pub-3940256099942544/1712485313'
-        : 'ca-app-pub-3940256099942544/5224354917';
+        ? 'ca-app-pub-3940256099942544/1712485313' // TODO: Add iOS rewarded ad unit ID
+        : 'ca-app-pub-5118580699569063/7195644830';
   }
 
   void _loadRewardedAd() {
-    if (_isRewardedLoading || _rewardedAd != null) return;
+    if (_isRewardedLoading || _rewardedAd != null || !mounted) return;
     _isRewardedLoading = true;
+    debugPrint('📺 Loading rewarded ad...');
 
     RewardedAd.load(
       adUnitId: _rewardedUnitId,
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
+          if (!mounted) {
+            ad.dispose();
+            return;
+          }
+          debugPrint('✅ Rewarded ad loaded successfully');
           _rewardedAd = ad;
           _isRewardedLoading = false;
           _rewardedAd?.fullScreenContentCallback = FullScreenContentCallback(
@@ -105,6 +155,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               _loadRewardedAd();
             },
             onAdFailedToShowFullScreenContent: (ad, error) {
+              debugPrint('❌ Ad failed to show: $error');
               ad.dispose();
               _rewardedAd = null;
               _loadRewardedAd();
@@ -113,9 +164,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           setState(() {});
         },
         onAdFailedToLoad: (error) {
-          debugPrint('Rewarded ad failed to load: $error');
+          debugPrint('❌ Rewarded ad failed to load: ${error.code} - ${error.message}');
           _isRewardedLoading = false;
           _rewardedAd = null;
+          // Retry after delay - longer delay for repeated failures
+          final retryDelay = error.code == 0 ? 60 : 30; // Internal error = longer wait
+          Future.delayed(Duration(seconds: retryDelay), () {
+            if (mounted) _loadRewardedAd();
+          });
         },
       ),
     );
@@ -209,6 +265,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
       ),
     );
+  }
+
+  void _resumeQuran() {
+    if (_lastReadSurah == null) return;
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => QuranSurahScreen(summary: _lastReadSurah!)))
+        .then((_) => _loadLastReadQuran());
   }
 
   String _duaFor(String choice) {
@@ -310,14 +373,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final nextFajr = tTimes?['Fajr'];
       final last = ordered.last;
       if (nextFajr != null) {
+        final midnight = DateTime(now.year, now.month, now.day + 1);
+        final end = nextFajr.isBefore(midnight) ? nextFajr : midnight;
         return {
           'currentName': last['name'],
-          'currentEndsAt': nextFajr,
+          'currentEndsAt': end,
           'nextName': 'Fajr',
           'nextTime': nextFajr,
         };
       }
-      return null;
+      // If no Fajr time, at least show until midnight
+      final fallbackMidnight = DateTime(now.year, now.month, now.day + 1);
+      return {
+        'currentName': last['name'],
+        'currentEndsAt': fallbackMidnight,
+        'nextName': 'Fajr',
+        'nextTime': fallbackMidnight,
+      };
     }
 
     final next = ordered[nextIdx];
@@ -352,6 +424,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           end = service.sunrise!.subtract(const Duration(minutes: 10));
         }
         break;
+      case 'dhuhr':
+        if (service.asr != null) {
+          end = service.asr!.subtract(const Duration(minutes: 5));
+        }
+        break;
       case 'asr':
         if (service.maghrib != null) {
           end = service.maghrib!.subtract(const Duration(minutes: 20));
@@ -364,9 +441,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
         break;
       case 'isha':
-        // For Isha, show time left until midnight
+        // For Isha, show time left until midnight or next Fajr (whichever is sooner)
+        final tomorrow = DateTime(now.year, now.month, now.day + 1);
+        final tomorrowTimes = service.getPrayerTimesForDate(tomorrow);
+        final nextFajr = tomorrowTimes?['Fajr'];
         final midnight = DateTime(now.year, now.month, now.day + 1);
-        end = midnight;
+        if (nextFajr != null) {
+          end = nextFajr.isBefore(midnight) ? nextFajr : midnight;
+        } else {
+          end = midnight;
+        }
         break;
       default:
         end = nominalNext;
@@ -441,6 +525,79 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   showSupport: true,
                   onSupport: _onSupportPressed,
                 ),
+                if (_lastReadSurah != null && _lastReadAyah != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withOpacity(0.18)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.15),
+                            blurRadius: 12,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 46,
+                            height: 46,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [Color(0xFF2DD4BF), Color(0xFF14B8A6)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                            ),
+                            child: const Icon(Icons.bookmark_added, color: Colors.white),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Continue Quran',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.92),
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${_lastReadSurah!.number}. ${_lastReadSurah!.nameEnglish}',
+                                  style: TextStyle(color: Colors.white.withOpacity(0.9)),
+                                ),
+                                Text(
+                                  'Start at ayah $_lastReadAyah',
+                                  style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: _resumeQuran,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.tealAccent.shade400,
+                              foregroundColor: Colors.black87,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 0,
+                            ),
+                            child: const Text('Resume'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
                 if (isRamadan && !_bannerDismissed)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -615,6 +772,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     switch (name.toLowerCase()) {
       case 'fajr':
         window = const Duration(minutes: 10);
+        break;
+      case 'dhuhr':
+        window = const Duration(minutes: 5);
         break;
       case 'asr':
         window = const Duration(minutes: 20);

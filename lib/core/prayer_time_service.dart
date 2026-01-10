@@ -375,6 +375,26 @@ class PrayerTimeService extends ChangeNotifier {
     debugPrint('✅ Notifications scheduled');
   }
   
+  /// Ensure the next prayer is always scheduled (call on app resume)
+  Future<void> ensureNextPrayerScheduled() async {
+    debugPrint('🔄 Ensuring next prayer is scheduled...');
+    
+    // Check if it's a new day first
+    if (needsReschedule()) {
+      debugPrint('📅 New day detected - full reschedule');
+      await rescheduleIfNeeded();
+      return;
+    }
+    
+    // Even if not a new day, ensure native scheduler has the next alarm set
+    final notificationService = AdhanNotificationService();
+    await notificationService.scheduleAllPrayersForToday(
+      latitude: _latitude,
+      longitude: _longitude,
+    );
+    debugPrint('✅ Next prayer scheduling ensured');
+  }
+  
   /// Check if we need to reschedule notifications (new day detected)
   bool needsReschedule() {
     if (_lastScheduledDate == null) return false;

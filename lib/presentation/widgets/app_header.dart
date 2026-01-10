@@ -30,9 +30,10 @@ class AppHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final accentColor = theme.colorScheme.primary;
-    final backgroundColor = isDark ? const Color(0xFF1a1d2e) : theme.colorScheme.surface;
-    final surfaceColor = isDark ? const Color(0xFF252836) : theme.colorScheme.surface;
-    final textColor = isDark ? Colors.white : theme.colorScheme.onSurface;
+    // Force white background and black text for light theme
+    final backgroundColor = isDark ? const Color(0xFF1a1d2e) : Colors.white;
+    final surfaceColor = isDark ? const Color(0xFF252836) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
     
     // Determine the location text only if we have data
     String? locationText;

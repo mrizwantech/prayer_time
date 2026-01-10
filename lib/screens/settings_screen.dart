@@ -315,7 +315,7 @@ class SettingsScreen extends StatelessWidget {
         ),
         subtitle: Text(subtitle),
         trailing: isSelected
-          ? const Icon(Icons.check_circle, color: Colors.white)
+            ? Icon(Icons.check_circle, color: accentColor)
             : null,
         onTap: () {
           themeSettings.setThemeMode(mode);
@@ -335,90 +335,85 @@ class SettingsScreen extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) {
-        return ListenableBuilder(
-          listenable: settings,
-          builder: (_, __) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: const [
-                      Icon(Icons.nightlight_round, color: Colors.amber),
-                      SizedBox(width: 8),
-                      Text('Ramadan Reminders', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Suhoor reminders'),
-                    subtitle: const Text('Repeat until Fajr from 1 hour before'),
-                    value: settings.suhoorEnabled,
-                    onChanged: (val) => settings.setSuhoorEnabled(val),
-                  ),
-                  if (settings.suhoorEnabled) ...[
-                    const SizedBox(height: 4),
-                    const Text('Repeat every'),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        _intervalChip(ctx, settings, 5),
-                        const SizedBox(width: 8),
-                        _intervalChip(ctx, settings, 10),
-                        const SizedBox(width: 8),
-                        _intervalChip(ctx, settings, 15),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Start before Fajr'),
-                        Text('${settings.suhoorStartMinutesBeforeFajr} min'),
-                      ],
-                    ),
-                    Slider(
-                      value: settings.suhoorStartMinutesBeforeFajr.toDouble(),
-                      min: 30,
-                      max: 90,
-                      divisions: 12,
-                      label: '${settings.suhoorStartMinutesBeforeFajr} min',
-                      onChanged: (v) => settings.setSuhoorStartMinutesBeforeFajr(v.round()),
-                    ),
-                  ],
-                  const Divider(),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Iftar alert'),
-                    subtitle: Text('Single alert ${settings.iftarMinutesBeforeMaghrib} min before Maghrib'),
-                    value: settings.iftarEnabled,
-                    onChanged: (val) => settings.setIftarEnabled(val),
-                  ),
-                  if (settings.iftarEnabled) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Alert before Maghrib'),
-                        Text('${settings.iftarMinutesBeforeMaghrib} min'),
-                      ],
-                    ),
-                    Slider(
-                      value: settings.iftarMinutesBeforeMaghrib.toDouble(),
-                      min: 5,
-                      max: 20,
-                      divisions: 3,
-                      label: '${settings.iftarMinutesBeforeMaghrib} min',
-                      onChanged: (v) => settings.setIftarMinutesBeforeMaghrib(v.round()),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.nightlight_round, color: Colors.amber),
+                  SizedBox(width: 8),
+                  Text('Ramadan Reminders', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
-            );
-          },
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Suhoor reminders'),
+                subtitle: const Text('Repeat until Fajr from 1 hour before'),
+                value: settings.suhoorEnabled,
+                onChanged: (val) => settings.setSuhoorEnabled(val),
+              ),
+              if (settings.suhoorEnabled) ...[
+                const SizedBox(height: 4),
+                const Text('Repeat every'),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    _intervalChip(ctx, settings, 5),
+                    const SizedBox(width: 8),
+                    _intervalChip(ctx, settings, 10),
+                    const SizedBox(width: 8),
+                    _intervalChip(ctx, settings, 15),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Start before Fajr'),
+                    Text('${settings.suhoorStartMinutesBeforeFajr} min'),
+                  ],
+                ),
+                Slider(
+                  value: settings.suhoorStartMinutesBeforeFajr.toDouble(),
+                  min: 30,
+                  max: 90,
+                  divisions: 12,
+                  label: '${settings.suhoorStartMinutesBeforeFajr} min',
+                  onChanged: (v) => settings.setSuhoorStartMinutesBeforeFajr(v.round()),
+                ),
+              ],
+              const Divider(),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Iftar alert'),
+                subtitle: Text('Single alert ${settings.iftarMinutesBeforeMaghrib} min before Maghrib'),
+                value: settings.iftarEnabled,
+                onChanged: (val) => settings.setIftarEnabled(val),
+              ),
+              if (settings.iftarEnabled) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Alert before Maghrib'),
+                    Text('${settings.iftarMinutesBeforeMaghrib} min'),
+                  ],
+                ),
+                Slider(
+                  value: settings.iftarMinutesBeforeMaghrib.toDouble(),
+                  min: 5,
+                  max: 20,
+                  divisions: 3,
+                  label: '${settings.iftarMinutesBeforeMaghrib} min',
+                  onChanged: (v) => settings.setIftarMinutesBeforeMaghrib(v.round()),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
         );
       },
     );

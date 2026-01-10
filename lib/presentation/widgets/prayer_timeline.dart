@@ -533,17 +533,22 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                     builder: (context, timeSettings, _) => Column(
                       children: prayers.map((p) {
                         final isCurrent = prayers[currentIndex]['name'] == p['name'];
+                        final theme = Theme.of(context);
+                        final isDark = theme.brightness == Brightness.dark;
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                           decoration: BoxDecoration(
-                            color: isCurrent
-                                ? currentTheme.secondaryColor.withOpacity(0.18)
-                                : Colors.white.withOpacity(0.08),
+                            color: isDark
+                                ? (isCurrent
+                                    ? currentTheme.secondaryColor.withOpacity(0.18)
+                                    : Colors.white.withOpacity(0.08))
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: (isCurrent ? currentTheme.secondaryColor : Colors.white)
-                                  .withOpacity(0.16),
+                              color: isDark
+                                  ? (isCurrent ? currentTheme.secondaryColor : Colors.white).withOpacity(0.16)
+                                  : Colors.black12,
                             ),
                           ),
                           child: Row(
@@ -553,7 +558,7 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                                 children: [
                                   Text(
                                     p['icon'],
-                                    style: const TextStyle(fontSize: 18),
+                                    style: TextStyle(fontSize: 18, color: isDark ? currentTheme.textColor : Colors.black),
                                   ),
                                   const SizedBox(width: 10),
                                   Column(
@@ -562,7 +567,7 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                                       Text(
                                         p['name'],
                                         style: TextStyle(
-                                          color: currentTheme.textColor,
+                                          color: isDark ? currentTheme.textColor : Colors.black,
                                           fontWeight: FontWeight.w800,
                                           fontSize: 15 * fs,
                                         ),
@@ -570,7 +575,7 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                                       Text(
                                         _formatTime(p['time'], timeSettings.is24Hour),
                                         style: TextStyle(
-                                          color: currentTheme.textColor.withOpacity(0.8),
+                                          color: isDark ? currentTheme.textColor.withOpacity(0.8) : Colors.black87,
                                           fontSize: 13 * fs,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -583,13 +588,13 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: currentTheme.secondaryColor.withOpacity(0.2),
+                                    color: isDark ? currentTheme.secondaryColor.withOpacity(0.2) : Colors.black12,
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
                                     'Now',
                                     style: TextStyle(
-                                      color: currentTheme.textColor,
+                                      color: isDark ? currentTheme.textColor : Colors.black,
                                       fontWeight: FontWeight.w700,
                                       fontSize: 12 * fs,
                                     ),

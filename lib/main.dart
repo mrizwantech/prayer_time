@@ -9,6 +9,7 @@ import 'screens/qibla_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/adhan_player_screen.dart';
 import 'screens/tasbeeh_screen.dart';
+import 'screens/quran_screen.dart';
 import 'screens/calculation_method_screen.dart';
 import 'features/prayer_tracker/prayer_tracker_screen.dart';
 import 'package:provider/provider.dart';
@@ -175,6 +176,7 @@ class _MyAppState extends State<MyApp> {
                   as Map<String, dynamic>;
           return AdhanPlayerScreen(prayerName: args['prayerName']);
         },
+        '/settings': (context) => SettingsScreen(),
       },
     );
   }
@@ -434,6 +436,7 @@ class _MainNavigationState extends State<MainNavigation> {
   int selectedIndex = 0;
   final List<Widget> screens = const [
     HomeScreen(),
+    QuranScreen(),
     TasbeehScreen(),
     QiblaScreen(),
     PrayerTrackerScreen(),
@@ -704,6 +707,7 @@ class _MainNavigationState extends State<MainNavigation> {
           backgroundColor: theme.colorScheme.surface,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Quran'),
             BottomNavigationBarItem(
               icon: Icon(Icons.radio_button_checked),
               label: 'Tasbeeh',
