@@ -8,6 +8,7 @@ import '../presentation/widgets/app_header.dart';
 import '../core/prayer_theme_provider.dart';
 import '../core/quran_api_client.dart';
 import 'quran_surah_screen.dart';
+import 'dua_generator_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hijri_date/hijri_date.dart';
 import 'package:intl/intl.dart';
@@ -27,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isRewardedLoading = false;
   SurahSummary? _lastReadSurah;
   int? _lastReadAyah;
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
 
   @override
   void initState() {
@@ -41,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    _lifecycleState = state;
     if (state == AppLifecycleState.resumed) {
       debugPrint('🔄 App resumed');
       // Always ensure next prayer is scheduled when app is opened
@@ -50,6 +53,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _startCountdownTimer();
     }
   }
+  
+  bool get _isAppInForeground => _lifecycleState == AppLifecycleState.resumed;
   
   void _startCountdownTimer() {
     _countdownTimer?.cancel();
@@ -178,6 +183,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _showSupportAd() {
+    // Check if app is in foreground - AdMob requires this
+    if (!_isAppInForeground) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please unlock your device to watch the ad.')),
+      );
+      return;
+    }
+
     if (_rewardedAd != null) {
       _rewardedAd!.show(
         onUserEarnedReward: (_, reward) {
@@ -199,71 +212,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _handleDuaFlow() async {
     if (!mounted) return;
-    final choice = await _promptDuaSelection();
-    if (choice == null || !mounted) return;
-    await _showDuaForChoice(choice);
-  }
-
-  Future<String?> _promptDuaSelection() {
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Who do you want us to make dua for?'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(ctx).pop('Business'),
-            child: const Text('Business / work'),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(ctx).pop('Mother'),
-            child: const Text('Mother'),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(ctx).pop('Health'),
-            child: const Text('Health'),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(ctx).pop('Family'),
-            child: const Text('Family'),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(ctx).pop('Guidance'),
-            child: const Text('Guidance and ease'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showDuaForChoice(String choice) {
-    final base = _duaFor(choice);
-    final duas = List<String>.generate(10, (i) => '${i + 1}. $base');
-
-    return showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Making duas for $choice'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('We will make these 10 duas for you:'),
-              const SizedBox(height: 8),
-              ...duas.map((d) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Text(d),
-                  )),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Ameen'),
-          ),
-        ],
-      ),
+    // Navigate to the Dynamic Dua Generator screen
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DuaGeneratorScreen()),
     );
   }
 
@@ -272,23 +223,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => QuranSurahScreen(summary: _lastReadSurah!)))
         .then((_) => _loadLastReadQuran());
-  }
-
-  String _duaFor(String choice) {
-    switch (choice) {
-      case 'Business':
-        return 'May Allah put barakah in your work, open halal opportunities, and ease your provision.';
-      case 'Mother':
-        return 'May Allah bless your mother with health, mercy, and Jannah, and keep her under His protection.';
-      case 'Health':
-        return 'May Allah grant you and your loved ones full healing, strength, and steadfast patience.';
-      case 'Family':
-        return 'May Allah protect your family, unite your hearts, and fill your home with mercy and peace.';
-      case 'Guidance':
-        return 'May Allah guide you, remove difficulties, and make the path ahead clear and beneficial.';
-      default:
-        return 'May Allah accept your intentions, grant you ease, and increase you in goodness.';
-    }
   }
 
   Future<void> _onSupportPressed() async {
