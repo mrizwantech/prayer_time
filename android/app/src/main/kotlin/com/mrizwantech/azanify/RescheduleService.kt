@@ -103,8 +103,9 @@ class RescheduleService : Service() {
         Log.d(TAG, "   Maghrib: ${prayerTimes.maghrib}")
         Log.d(TAG, "   Isha: ${prayerTimes.isha}")
         
-        // Get the selected adhan sound
-        val soundFile = prefs.getString("flutter.selected_adhan", "fajr") ?: "fajr"
+        // Get the user's selected adhan sound for non-Fajr prayers
+        val userSelectedAdhan = prefs.getString("flutter.selected_adhan", "Rabeh Ibn Darah Al Jazairi - Adan Al Jazaer") 
+            ?: "Rabeh Ibn Darah Al Jazairi - Adan Al Jazaer"
         
         // Pick the very next prayer only (single exact alarm for reliability)
         val tomorrowPrayers = listOf(
@@ -119,6 +120,9 @@ class RescheduleService : Service() {
         val nextPrayer = tomorrowPrayers.firstOrNull { it.second > now }
 
         if (nextPrayer != null) {
+            // Fajr always uses 'fajr' adhan, other prayers use user's selected adhan
+            val soundFile = if (nextPrayer.first.lowercase() == "fajr") "fajr" else userSelectedAdhan
+            Log.d(TAG, "Sound file for ${nextPrayer.first}: $soundFile")
             scheduleAlarm(nextPrayer.first, soundFile, nextPrayer.second, 6000)
         } else {
             Log.w(TAG, "⚠️ No upcoming prayer found to schedule")
