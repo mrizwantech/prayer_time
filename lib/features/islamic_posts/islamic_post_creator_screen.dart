@@ -844,34 +844,61 @@ class _MoreOptionsSection extends StatelessWidget {
       children: [
         const Divider(),
         const SizedBox(height: 8),
-        
-        // Font size controls
+
+        // Font size controls - stacked vertically to prevent overflow
         Row(
           children: [
-            const Text('Arabic Size: '),
-            IconButton(
-              icon: const Icon(Icons.remove),
-              onPressed: editor.decreaseArabicFontSize,
-              iconSize: 20,
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Flexible(child: Text('Arabic: ', style: TextStyle(fontSize: 13))),
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline),
+                    onPressed: editor.decreaseArabicFontSize,
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                  Text('${editor.textStyle.arabicFontSize.round()}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: editor.increaseArabicFontSize,
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
             ),
-            Text('${editor.textStyle.arabicFontSize.round()}'),
-            IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: editor.increaseArabicFontSize,
-              iconSize: 20,
-            ),
-            const Spacer(),
-            const Text('Translation: '),
-            IconButton(
-              icon: const Icon(Icons.remove),
-              onPressed: editor.decreaseTranslationFontSize,
-              iconSize: 20,
-            ),
-            Text('${editor.textStyle.translationFontSize.round()}'),
-            IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: editor.increaseTranslationFontSize,
-              iconSize: 20,
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Flexible(child: Text('Trans: ', style: TextStyle(fontSize: 13))),
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline),
+                    onPressed: editor.decreaseTranslationFontSize,
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                  Text('${editor.textStyle.translationFontSize.round()}',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: editor.increaseTranslationFontSize,
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
