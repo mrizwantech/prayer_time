@@ -69,9 +69,19 @@ object PrayerScheduler {
             return
         }
 
+        // Fajr always uses 'fajr' adhan, other prayers use user's selected adhan
+        val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val soundFile = if (prayerName.lowercase() == "fajr") {
+            "fajr"
+        } else {
+            prefs.getString("flutter.selected_adhan", "Rabeh Ibn Darah Al Jazairi - Adan Al Jazaer") 
+                ?: "Rabeh Ibn Darah Al Jazairi - Adan Al Jazaer"
+        }
+        Log.d("PrayerScheduler", "Sound file for $prayerName: $soundFile")
+
         val intent = Intent(context, AdhanAlarmReceiver::class.java).apply {
             putExtra("prayerName", prayerName)
-            putExtra("soundFile", "fajr") // default; service can override if needed
+            putExtra("soundFile", soundFile)
         }
 
         // Single deterministic requestCode

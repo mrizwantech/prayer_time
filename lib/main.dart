@@ -12,6 +12,7 @@ import 'screens/tasbeeh_screen.dart';
 import 'screens/quran_screen.dart';
 import 'screens/calculation_method_screen.dart';
 import 'features/prayer_tracker/rakah_counter_screen.dart';
+import 'features/islamic_posts/islamic_post_creator_screen.dart';
 import 'package:provider/provider.dart';
 import 'core/time_format_settings.dart';
 import 'core/calculation_method_settings.dart';
@@ -440,6 +441,7 @@ class _MainNavigationState extends State<MainNavigation> {
     TasbeehScreen(),
     QiblaScreen(),
     RakahCounterScreen(),
+    IslamicPostCreatorScreen(),
     SettingsScreen(),
   ];
 
@@ -715,7 +717,11 @@ class _MainNavigationState extends State<MainNavigation> {
             BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
             BottomNavigationBarItem(
               icon: Icon(Icons.track_changes),
-              label: 'RakatTracker',
+              label: 'Rakat',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.brush),
+              label: 'Posts',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.settings),
