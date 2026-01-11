@@ -38,6 +38,7 @@
             android:value="ca-app-pub-5118580699569063~1126072263" />
         <activity
             android:name=".MainActivity"
+            android:screenOrientation="portrait"
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
