@@ -63,6 +63,7 @@ class PostPreviewWidget extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     // Arabic text
                     if (editor.textStyle.showArabic && 
@@ -80,48 +81,58 @@ class PostPreviewWidget extends StatelessWidget {
                           ),
                           textAlign: editor.textStyle.textAlignment,
                           textDirection: TextDirection.rtl,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 5,
                         ),
                       ),
 
                     if (editor.textStyle.showArabic && 
                         editor.content.arabicText.isNotEmpty)
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
 
                     // Transliteration
                     if (editor.textStyle.showTransliteration &&
                         editor.content.transliterationText.isNotEmpty) ...[
-                      Text(
-                        editor.content.transliterationText,
-                        style: TextStyle(
-                          fontSize: editor.textStyle.transliterationFontSize,
-                          color: editor.textStyle.secondaryTextColor,
-                          fontStyle: FontStyle.italic,
+                      Flexible(
+                        child: Text(
+                          editor.content.transliterationText,
+                          style: TextStyle(
+                            fontSize: editor.textStyle.transliterationFontSize,
+                            color: editor.textStyle.secondaryTextColor,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          textAlign: editor.textStyle.textAlignment,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 3,
                         ),
-                        textAlign: editor.textStyle.textAlignment,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                     ],
 
                     // Translation
                     if (editor.textStyle.showTranslation &&
                         editor.content.translationText.isNotEmpty)
-                      Text(
-                        editor.content.translationText,
-                        style: TextStyle(
-                          fontSize: editor.textStyle.translationFontSize,
-                          fontStyle: editor.textStyle.translationItalic
-                              ? FontStyle.italic
-                              : FontStyle.normal,
-                          color: editor.textStyle.secondaryTextColor,
-                          height: 1.5,
+                      Flexible(
+                        child: Text(
+                          editor.content.translationText,
+                          style: TextStyle(
+                            fontSize: editor.textStyle.translationFontSize,
+                            fontStyle: editor.textStyle.translationItalic
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                            color: editor.textStyle.secondaryTextColor,
+                            height: 1.5,
+                          ),
+                          textAlign: editor.textStyle.textAlignment,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 4,
                         ),
-                        textAlign: editor.textStyle.textAlignment,
                       ),
 
                     // Reference
                     if (editor.textStyle.showReference &&
                         editor.content.referenceText.isNotEmpty) ...[
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       Text(
                         '— ${editor.content.referenceText}',
                         style: TextStyle(
@@ -130,6 +141,8 @@ class PostPreviewWidget extends StatelessWidget {
                               .withOpacity(0.8),
                         ),
                         textAlign: editor.textStyle.textAlignment,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
                       ),
                     ],
                   ],

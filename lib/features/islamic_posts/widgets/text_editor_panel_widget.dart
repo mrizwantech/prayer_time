@@ -78,26 +78,35 @@ class _TextEditorPanelWidgetState extends State<TextEditorPanelWidget> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Content',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
+              Flexible(
+                child: Text(
+                  'Content',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: () => _showDuaLibrary(context),
-                    icon: const Icon(Icons.menu_book, size: 18),
-                    label: const Text('Dua Library'),
+              Flexible(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => _showDuaLibrary(context),
+                        icon: const Icon(Icons.menu_book, size: 16),
+                        label: const Text('Duas', style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                      ),
+                      TextButton.icon(
+                        onPressed: () => _showSamplePicker(context),
+                        icon: const Icon(Icons.library_books, size: 16),
+                        label: const Text('Samples', style: TextStyle(fontSize: 12)),
+                        style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  TextButton.icon(
-                    onPressed: () => _showSamplePicker(context),
-                    icon: const Icon(Icons.library_books, size: 18),
-                    label: const Text('Samples'),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
