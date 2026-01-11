@@ -30,9 +30,8 @@ class PostEditorProvider extends ChangeNotifier {
   bool _showDecorations = true;
   bool get showDecorations => _showDecorations;
 
-  // Watermark
-  bool _showWatermark = true;
-  bool get showWatermark => _showWatermark;
+  // Watermark - always shown
+  final bool showWatermark = true;
 
   // App name for watermark
   String _watermarkText = 'Azanify';
@@ -46,7 +45,6 @@ class PostEditorProvider extends ChangeNotifier {
     _aspectRatio = PostAspectRatio.square;
     _selectedTemplate = null;
     _showDecorations = true;
-    _showWatermark = true;
     notifyListeners();
   }
 
@@ -171,12 +169,6 @@ class PostEditorProvider extends ChangeNotifier {
   // Toggle decorations
   void setShowDecorations(bool show) {
     _showDecorations = show;
-    notifyListeners();
-  }
-
-  // Toggle watermark
-  void setShowWatermark(bool show) {
-    _showWatermark = show;
     notifyListeners();
   }
 

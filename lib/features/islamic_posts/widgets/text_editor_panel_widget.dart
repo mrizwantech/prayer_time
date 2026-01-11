@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/post_template.dart';
 import '../models/post_content.dart';
+import '../models/dua_library.dart';
 import '../providers/post_editor_provider.dart';
+import '../services/translation_service.dart';
+import 'dua_library_browser.dart';
 
 /// Widget for editing post text content
 class TextEditorPanelWidget extends StatefulWidget {
@@ -21,6 +24,9 @@ class _TextEditorPanelWidgetState extends State<TextEditorPanelWidget> {
   late TextEditingController _translationController;
   late TextEditingController _transliterationController;
   late TextEditingController _referenceController;
+  
+  bool _isTranslating = false;
+  TranslationLanguage _selectedTranslationLanguage = TranslationLanguage.english;
 
   @override
   void initState() {
@@ -78,16 +84,26 @@ class _TextEditorPanelWidgetState extends State<TextEditorPanelWidget> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              TextButton.icon(
-                onPressed: () => _showSamplePicker(context),
-                icon: const Icon(Icons.library_books, size: 18),
-                label: const Text('Browse Samples'),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _showDuaLibrary(context),
+                    icon: const Icon(Icons.menu_book, size: 18),
+                    label: const Text('Dua Library'),
+                  ),
+                  const SizedBox(width: 4),
+                  TextButton.icon(
+                    onPressed: () => _showSamplePicker(context),
+                    icon: const Icon(Icons.library_books, size: 18),
+                    label: const Text('Samples'),
+                  ),
+                ],
               ),
             ],
           ),
         ),
 
-        // Arabic text field
+        // Arabic text field with translation button
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: TextField(
@@ -103,26 +119,114 @@ class _TextEditorPanelWidgetState extends State<TextEditorPanelWidget> {
                 borderRadius: BorderRadius.circular(12),
               ),
               prefixIcon: const Icon(Icons.text_fields),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_arabicController.text.isNotEmpty)
+                    IconButton(
+                      icon: _isTranslating 
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.translate),
+                      tooltip: 'Translate Arabic to selected language',
+                      onPressed: _isTranslating ? null : _translateArabicText,
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.auto_fix_high),
+                    tooltip: 'Generate transliteration',
+                    onPressed: _generateTransliteration,
+                  ),
+                ],
+              ),
             ),
-            onChanged: (value) => editor.updateContent(arabicText: value),
+            onChanged: (value) {
+              editor.updateContent(arabicText: value);
+              setState(() {});
+            },
           ),
         ),
 
-        // Translation field
+        // Translation language selector and field
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: TextField(
-            controller: _translationController,
-            maxLines: 2,
-            decoration: InputDecoration(
-              labelText: 'Translation',
-              hintText: 'Enter translation...',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Language selector row
+              Row(
+                children: [
+                  Text(
+                    'Translate to:',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.7),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: TranslationLanguage.values.map((lang) {
+                          final isSelected = _selectedTranslationLanguage == lang;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: ChoiceChip(
+                              label: Text(
+                                lang.displayName,
+                                style: TextStyle(fontSize: 11),
+                              ),
+                              selected: isSelected,
+                              onSelected: (_) {
+                                setState(() => _selectedTranslationLanguage = lang);
+                              },
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              prefixIcon: const Icon(Icons.translate),
-            ),
-            onChanged: (value) => editor.updateContent(translationText: value),
+              const SizedBox(height: 8),
+              // Translation text field
+              TextField(
+                controller: _translationController,
+                maxLines: 2,
+                textDirection: _selectedTranslationLanguage.isRTL 
+                    ? TextDirection.rtl 
+                    : TextDirection.ltr,
+                decoration: InputDecoration(
+                  labelText: 'Translation (${_selectedTranslationLanguage.displayName})',
+                  hintText: 'Enter translation...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  prefixIcon: const Icon(Icons.translate),
+                  suffixIcon: _translationController.text.isNotEmpty
+                      ? IconButton(
+                          icon: _isTranslating 
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.g_translate),
+                          tooltip: 'Translate to Arabic',
+                          onPressed: _isTranslating ? null : _translateToArabic,
+                        )
+                      : null,
+                ),
+                onChanged: (value) {
+                  editor.updateContent(translationText: value);
+                  setState(() {});
+                },
+              ),
+            ],
           ),
         ),
 
@@ -301,6 +405,150 @@ class _TextEditorPanelWidgetState extends State<TextEditorPanelWidget> {
           widget.editor.loadSampleContent(sample);
           Navigator.pop(context);
         },
+      ),
+    );
+  }
+
+  void _showDuaLibrary(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DuaLibraryBrowser(
+        editor: widget.editor,
+        onSelect: () {
+          // Update controllers with new content
+          _arabicController.text = widget.editor.content.arabicText;
+          _translationController.text = widget.editor.content.translationText;
+          _transliterationController.text = widget.editor.content.transliterationText;
+          _referenceController.text = widget.editor.content.referenceText;
+          Navigator.pop(context);
+          setState(() {});
+        },
+      ),
+    );
+  }
+
+  Future<void> _translateArabicText() async {
+    if (_arabicController.text.isEmpty) return;
+    
+    setState(() => _isTranslating = true);
+    
+    try {
+      final targetLang = _selectedTranslationLanguage.code;
+      final translation = await TranslationService.translateFromArabic(
+        _arabicController.text,
+        toLang: targetLang,
+      );
+      
+      if (mounted && translation != null) {
+        _translationController.text = translation;
+        widget.editor.updateContent(translationText: translation);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Translated to ${_selectedTranslationLanguage.displayName}'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Translation failed. Please try again.'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Translation failed: $e'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isTranslating = false);
+      }
+    }
+  }
+
+  Future<void> _translateToArabic() async {
+    if (_translationController.text.isEmpty) return;
+    
+    setState(() => _isTranslating = true);
+    
+    try {
+      final sourceLang = _selectedTranslationLanguage.code;
+      final arabic = await TranslationService.translateToArabic(
+        _translationController.text,
+        fromLang: sourceLang,
+      );
+      
+      if (mounted && arabic != null) {
+        _arabicController.text = arabic;
+        widget.editor.updateContent(arabicText: arabic);
+        
+        // Auto-generate transliteration
+        _generateTransliteration();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Translated to Arabic'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Translation failed. Please try again.'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Translation failed: $e'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isTranslating = false);
+      }
+    }
+  }
+
+  void _generateTransliteration() {
+    if (_arabicController.text.isEmpty) return;
+    
+    final transliteration = TransliterationService.transliterate(
+      _arabicController.text,
+    );
+    
+    _transliterationController.text = transliteration;
+    widget.editor.updateContent(transliterationText: transliteration);
+    setState(() {});
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Transliteration generated'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 1),
       ),
     );
   }

@@ -270,27 +270,13 @@ class _IslamicPostCreatorScreenState extends State<IslamicPostCreatorScreen>
                         // Quick options
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: SwitchListTile(
-                                  title: const Text('Decorations'),
-                                  value: _editor.showDecorations,
-                                  onChanged: _editor.setShowDecorations,
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                              ),
-                              Expanded(
-                                child: SwitchListTile(
-                                  title: const Text('Watermark'),
-                                  value: _editor.showWatermark,
-                                  onChanged: _editor.setShowWatermark,
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                              ),
-                            ],
+                          child: SwitchListTile(
+                            title: const Text('Decorations'),
+                            subtitle: const Text('Show decorative elements'),
+                            value: _editor.showDecorations,
+                            onChanged: _editor.setShowDecorations,
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
                           ),
                         ),
                       ],
