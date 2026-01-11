@@ -63,7 +63,7 @@ String getRandomQuote(String prayerName) {
 }
 
 class PrayerTimeline extends StatefulWidget {
-  const PrayerTimeline({Key? key}) : super(key: key);
+  const PrayerTimeline({super.key});
 
   @override
   State<PrayerTimeline> createState() => _PrayerTimelineState();
@@ -261,194 +261,8 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Column(
                     children: [
-                  // Date Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          gregorianDate,
-                          style: TextStyle(
-                            color: currentTheme.textColor.withOpacity(0.9),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        hijriDateStr,
-                        style: TextStyle(
-                          color: currentTheme.secondaryColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Current Time (without seconds)
-                  Consumer<TimeFormatSettings>(
-                    builder: (context, timeSettings, _) {
-                      final timeFormat = timeSettings.is24Hour ? 'HH:mm' : 'hh:mm a';
-                      final currentTime = DateFormat(timeFormat).format(now);
-                      return Column(
-                        children: [
-                          if (isRamadan)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              margin: const EdgeInsets.only(bottom: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.teal.shade700,
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.teal.shade900.withOpacity(0.25),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 3),
-                                  )
-                                ],
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Ramadan Kareem',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Day ${HijriDate.now().hDay} of 29/30',
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.9),
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Icon(Icons.brightness_2, color: Colors.amber.shade200),
-                                ],
-                              ),
-                            ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                currentTime,
-                                style: TextStyle(
-                                  color: currentTheme.textColor,
-                                  fontSize: 32 * fs,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1,
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  
-                  // Moon phase & Sunrise/Sunset row
-                  const SizedBox(height: 8),
-                  Consumer<TimeFormatSettings>(
-                    builder: (context, timeSettings, _) {
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Moon phase
-                          Icon(
-                            _getMoonIcon(moonPhaseName),
-                            color: currentTheme.secondaryColor,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$moonIllumination%',
-                            style: TextStyle(
-                              color: currentTheme.textColor.withOpacity(0.7),
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Container(
-                            width: 1,
-                            height: 14,
-                            color: currentTheme.textColor.withOpacity(0.3),
-                          ),
-                          const SizedBox(width: 12),
-                          // Sunrise
-                          if (prayerService.sunrise != null) ...[
-                            Icon(
-                              Icons.wb_sunny_outlined,
-                              color: Colors.orange.withOpacity(0.9),
-                              size: 14,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Sunrise ',
-                              style: TextStyle(
-                                color: currentTheme.textColor.withOpacity(0.5),
-                                fontSize: 11,
-                              ),
-                            ),
-                            Text(
-                              _formatTime('${prayerService.sunrise!.hour.toString().padLeft(2, '0')}:${prayerService.sunrise!.minute.toString().padLeft(2, '0')}', timeSettings.is24Hour),
-                              style: TextStyle(
-                                color: currentTheme.textColor.withOpacity(0.8),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                          ],
-                          // Sunset
-                          if (prayerService.sunset != null) ...[
-                            Icon(
-                              Icons.wb_twilight,
-                              color: Colors.deepOrange.withOpacity(0.9),
-                              size: 14,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Sunset ',
-                              style: TextStyle(
-                                color: currentTheme.textColor.withOpacity(0.5),
-                                fontSize: 11,
-                              ),
-                            ),
-                            Text(
-                              _formatTime('${prayerService.sunset!.hour.toString().padLeft(2, '0')}:${prayerService.sunset!.minute.toString().padLeft(2, '0')}', timeSettings.is24Hour),
-                              style: TextStyle(
-                                color: currentTheme.textColor.withOpacity(0.8),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ],
-                      );
-                    },
-                  ),
-                  
                   // Islamic Events (if any today)
                   if (todaysEvents.isNotEmpty) ...[
-                    const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
@@ -481,7 +295,7 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                   ],
                   const SizedBox(height: 16),
                   
-                  // Inspirational quote or Ramadan suhoor/iftar chips
+                  // Ramadan suhoor/iftar chips
                   if (isRamadan)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
@@ -511,20 +325,6 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                           ],
                         ),
                       ),
-                    )
-                  else if (_currentQuote.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16, left: 8, right: 8),
-                      child: Text(
-                        '"$_currentQuote"',
-                        style: TextStyle(
-                          color: currentTheme.textColor.withOpacity(0.7),
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                          height: 1.4,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
                     ),
                   const SizedBox(height: 24),
                   
@@ -551,55 +351,73 @@ class _PrayerTimelineState extends State<PrayerTimeline> with SingleTickerProvid
                                   : Colors.black12,
                             ),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    p['icon'],
-                                    style: TextStyle(fontSize: 18, color: isDark ? currentTheme.textColor : Colors.black),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                  Row(
                                     children: [
                                       Text(
-                                        p['name'],
-                                        style: TextStyle(
-                                          color: isDark ? currentTheme.textColor : Colors.black,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 15 * fs,
-                                        ),
+                                        p['icon'],
+                                        style: TextStyle(fontSize: 18, color: isDark ? currentTheme.textColor : Colors.black),
                                       ),
-                                      Text(
-                                        _formatTime(p['time'], timeSettings.is24Hour),
-                                        style: TextStyle(
-                                          color: isDark ? currentTheme.textColor.withOpacity(0.8) : Colors.black87,
-                                          fontSize: 13 * fs,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                      const SizedBox(width: 10),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            p['name'],
+                                            style: TextStyle(
+                                              color: isDark ? currentTheme.textColor : Colors.black,
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 15 * fs,
+                                            ),
+                                          ),
+                                          Text(
+                                            _formatTime(p['time'], timeSettings.is24Hour),
+                                            style: TextStyle(
+                                              color: isDark ? currentTheme.textColor.withOpacity(0.8) : Colors.black87,
+                                              fontSize: 13 * fs,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
+                                  if (isCurrent)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: isDark ? currentTheme.secondaryColor.withOpacity(0.2) : Colors.black12,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        'Now',
+                                        style: TextStyle(
+                                          color: isDark ? currentTheme.textColor : Colors.black,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12 * fs,
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
-                              if (isCurrent)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: isDark ? currentTheme.secondaryColor.withOpacity(0.2) : Colors.black12,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    'Now',
-                                    style: TextStyle(
-                                      color: isDark ? currentTheme.textColor : Colors.black,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12 * fs,
-                                    ),
+                              // Show quote for current prayer
+                              if (isCurrent && _currentQuote.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  '"$_currentQuote"',
+                                  style: TextStyle(
+                                    color: isDark ? currentTheme.textColor.withOpacity(0.7) : Colors.black54,
+                                    fontSize: 11,
+                                    fontStyle: FontStyle.italic,
+                                    height: 1.3,
                                   ),
                                 ),
+                              ],
                             ],
                           ),
                         );
