@@ -3,13 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'screens/home_screen.dart';
 import 'screens/qibla_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/adhan_player_screen.dart';
 import 'screens/tasbeeh_screen.dart';
+import 'screens/quran_screen.dart';
 import 'screens/calculation_method_screen.dart';
-import 'features/prayer_tracker/prayer_tracker_screen.dart';
+import 'features/prayer_tracker/rakah_counter_screen.dart';
 import 'package:provider/provider.dart';
 import 'core/time_format_settings.dart';
 import 'core/calculation_method_settings.dart';
@@ -18,6 +20,8 @@ import 'core/permission_manager.dart';
 import 'core/prayer_time_service.dart';
 import 'core/app_theme_settings.dart';
 import 'core/prayer_font_settings.dart';
+import 'core/prayer_theme_provider.dart';
+import 'core/ramadan_reminder_settings.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 // Global navigator key for navigation from anywhere
@@ -29,6 +33,9 @@ void main() async {
 
   // Initialize timezone database for notifications
   tz.initializeTimeZones();
+
+  // Initialize Google Mobile Ads early for rewarded support ad
+  await MobileAds.instance.initialize();
 
   // Initialize notification service and check for notification launch
   final notificationService = AdhanNotificationService();
@@ -79,6 +86,15 @@ void main() async {
   final prayerTimeService = PrayerTimeService();
   prayerTimeService.setCalculationMethodSettings(calculationMethodSettings);
 
+  // Ramadan reminders settings
+  final ramadanReminderSettings = RamadanReminderSettings();
+  await ramadanReminderSettings.load();
+  prayerTimeService.setRamadanReminderSettings(ramadanReminderSettings);
+
+  // Load prayer theme prefs (Ramadan preview toggle)
+  final prayerThemeProvider = PrayerThemeProvider();
+  await prayerThemeProvider.loadPrefs();
+
   runApp(
     EasyLocalization(
       supportedLocales: const [Locale('en'), Locale('ar')],
@@ -91,6 +107,8 @@ void main() async {
           ChangeNotifierProvider.value(value: calculationMethodSettings),
           ChangeNotifierProvider.value(value: prayerTimeService),
           ChangeNotifierProvider.value(value: appThemeSettings),
+          ChangeNotifierProvider.value(value: prayerThemeProvider),
+          ChangeNotifierProvider.value(value: ramadanReminderSettings),
         ],
         child: MyApp(
           initialPrayerName: initialPrayerName,
@@ -158,6 +176,7 @@ class _MyAppState extends State<MyApp> {
                   as Map<String, dynamic>;
           return AdhanPlayerScreen(prayerName: args['prayerName']);
         },
+        '/settings': (context) => SettingsScreen(),
       },
     );
   }
@@ -417,9 +436,10 @@ class _MainNavigationState extends State<MainNavigation> {
   int selectedIndex = 0;
   final List<Widget> screens = const [
     HomeScreen(),
+    QuranScreen(),
     TasbeehScreen(),
     QiblaScreen(),
-    PrayerTrackerScreen(),
+    RakahCounterScreen(),
     SettingsScreen(),
   ];
 
@@ -674,31 +694,35 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      body: screens[selectedIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: selectedIndex,
-        onTap: onItemTapped,
-        selectedItemColor: theme.colorScheme.primary,
-        unselectedItemColor: theme.colorScheme.onSurface.withOpacity(0.5),
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: theme.colorScheme.surface,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.radio_button_checked),
-            label: 'Tasbeeh',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.track_changes),
-            label: 'Tracker',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
+    return WillPopScope(
+      onWillPop: () async => false, // disable back navigation
+      child: Scaffold(
+        body: screens[selectedIndex],
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: selectedIndex,
+          onTap: onItemTapped,
+          selectedItemColor: theme.colorScheme.primary,
+          unselectedItemColor: theme.colorScheme.onSurface.withOpacity(0.5),
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: theme.colorScheme.surface,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Quran'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.radio_button_checked),
+              label: 'Tasbeeh',
+            ),
+            BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.track_changes),
+              label: 'RakatTracker',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings),
+              label: 'Settings',
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -7,6 +7,8 @@ import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'calculation_method_settings.dart';
 import 'adhan_notification_service.dart';
+import 'package:hijri_date/hijri_date.dart';
+import 'ramadan_reminder_settings.dart';
 
 /// Single source of truth for prayer times, location, and scheduling
 /// All screens should consume from this service
@@ -31,6 +33,7 @@ class PrayerTimeService extends ChangeNotifier {
   // Dependencies
   CalculationMethodSettings? _calculationMethodSettings;
   String? _currentCalculationMethod;
+  RamadanReminderSettings? _ramadanReminderSettings;
   
   // Getters
   String? get city => _city;
@@ -79,6 +82,10 @@ class PrayerTimeService extends ChangeNotifier {
     
     // Listen for changes
     _calculationMethodSettings?.addListener(_onCalculationMethodChanged);
+  }
+
+  void setRamadanReminderSettings(RamadanReminderSettings settings) {
+    _ramadanReminderSettings = settings;
   }
   
   void _onCalculationMethodChanged() {
@@ -151,6 +158,12 @@ class PrayerTimeService extends ChangeNotifier {
   
   Future<void> _fetchLocation() async {
     debugPrint('📍 PrayerTimeService: Fetching location...');
+
+    // Ensure location services are on (emulators sometimes have them off)
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception('Location services are disabled. Please enable location on the device/emulator.');
+    }
     
     // Check permission
     LocationPermission permission = await Geolocator.checkPermission();
@@ -168,20 +181,34 @@ class PrayerTimeService extends ChangeNotifier {
     Position? position = await Geolocator.getLastKnownPosition();
     debugPrint('📍 Last known: ${position?.latitude}, ${position?.longitude}');
 
-    // If no last known, try a fresh lookup with a longer timeout
+    // If no last known, try fresh lookup with generous timeout (emulators can be slow)
     if (position == null) {
       try {
-        debugPrint('📍 Getting current position...');
+        debugPrint('📍 Getting current position (attempt 1)...');
         position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.lowest,
-            timeLimit: Duration(seconds: 8),
+            accuracy: LocationAccuracy.low,
+            timeLimit: Duration(seconds: 20),
           ),
         );
       } on TimeoutException catch (_) {
-        debugPrint('⏳ Location request timed out - trying stored fallback');
+        debugPrint('⏳ Location request timed out (attempt 1)');
       } catch (e) {
         debugPrint('❌ Error getting current position: $e');
+      }
+    }
+
+    // Second attempt without time limit if still null
+    if (position == null) {
+      try {
+        debugPrint('📍 Getting current position (attempt 2, no timeout)...');
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.low,
+          ),
+        );
+      } catch (e) {
+        debugPrint('❌ Error getting current position (attempt 2): $e');
       }
     }
 
@@ -195,10 +222,8 @@ class PrayerTimeService extends ChangeNotifier {
         _fetchCityState();
         return;
       }
-    }
 
-    if (position == null) {
-      throw Exception('Could not get location');
+      throw Exception('Could not get location. On emulator, set a GPS location in Extended Controls or allow location in settings.');
     }
 
     _latitude = position.latitude;
@@ -289,6 +314,7 @@ class PrayerTimeService extends ChangeNotifier {
     if (_latitude == null || _longitude == null) return;
     
     final now = DateTime.now();
+    final isRamadan = HijriDate.fromDate(now).hMonth == 9;
     // Check if already scheduled today
     if (_lastScheduledDate != null &&
         _lastScheduledDate!.year == now.year &&
@@ -308,16 +334,65 @@ class PrayerTimeService extends ChangeNotifier {
       longitude: _longitude,
     );
 
-    // Schedule silent Tahajjud reminder before Fajr (no adhan)
+    // Schedule silent Tahajjud/Suhoor reminder before Fajr (no adhan)
     if (_prayerTimes != null) {
       await notificationService.scheduleTahajjudNotification(
         ishaTime: _prayerTimes!.isha,
         fajrTime: _prayerTimes!.fajr,
+        isRamadan: isRamadan,
       );
+    }
+
+    // Schedule Taraweeh reminder after Isha during Ramadan
+    if (_prayerTimes != null && isRamadan) {
+      await notificationService.scheduleTaraweehReminder(
+        ishaTime: _prayerTimes!.isha,
+      );
+    }
+
+    // Ramadan configurable reminders (Suhoor repeats, Iftar single)
+    if (_prayerTimes != null && isRamadan && _ramadanReminderSettings != null) {
+      final rs = _ramadanReminderSettings!;
+      if (rs.suhoorEnabled) {
+        await notificationService.scheduleSuhoorRepeatingReminders(
+          fajrTime: _prayerTimes!.fajr,
+          startMinutesBeforeFajr: rs.suhoorStartMinutesBeforeFajr,
+          intervalMinutes: rs.suhoorIntervalMinutes,
+        );
+        await notificationService.scheduleSuhoorDuaReminder(
+          fajrTime: _prayerTimes!.fajr,
+        );
+      }
+      if (rs.iftarEnabled) {
+        await notificationService.scheduleIftarReminder(
+          maghribTime: _prayerTimes!.maghrib,
+          minutesBeforeMaghrib: rs.iftarMinutesBeforeMaghrib,
+        );
+      }
     }
     
     _lastScheduledDate = now;
     debugPrint('✅ Notifications scheduled');
+  }
+  
+  /// Ensure the next prayer is always scheduled (call on app resume)
+  Future<void> ensureNextPrayerScheduled() async {
+    debugPrint('🔄 Ensuring next prayer is scheduled...');
+    
+    // Check if it's a new day first
+    if (needsReschedule()) {
+      debugPrint('📅 New day detected - full reschedule');
+      await rescheduleIfNeeded();
+      return;
+    }
+    
+    // Even if not a new day, ensure native scheduler has the next alarm set
+    final notificationService = AdhanNotificationService();
+    await notificationService.scheduleAllPrayersForToday(
+      latitude: _latitude,
+      longitude: _longitude,
+    );
+    debugPrint('✅ Next prayer scheduling ensured');
   }
   
   /// Check if we need to reschedule notifications (new day detected)

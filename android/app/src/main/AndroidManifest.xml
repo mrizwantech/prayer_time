@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:attributionTags="location" />
+    <uses-permission
+        android:name="android.permission.ACCESS_COARSE_LOCATION"
+        android:attributionTags="location" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <!-- Notification permissions for Android 13+ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Exact alarm permission for precise prayer time notifications -->
@@ -19,14 +24,21 @@
     <!-- Foreground service permission for adhan playback -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <!-- Foreground service type for rescheduling (data sync) on Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <!-- Required to launch activity from background on Android 10+ -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <application
         android:label="Azanify"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-5118580699569063~1126072263" />
         <activity
             android:name=".MainActivity"
+            android:screenOrientation="portrait"
             android:exported="true"
             android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
@@ -65,7 +77,8 @@
         <service
             android:name=".RescheduleService"
             android:enabled="true"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
         
         <!-- Adhan alarm receiver for auto-launching prayer screen -->
         <receiver

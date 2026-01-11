@@ -5,6 +5,8 @@ import '../core/calculation_method_settings.dart';
 import '../core/prayer_time_service.dart';
 import '../core/app_theme_settings.dart';
 import '../core/prayer_font_settings.dart';
+import '../core/prayer_theme_provider.dart';
+import '../core/ramadan_reminder_settings.dart';
 import 'notification_settings_screen.dart';
 import 'adhan_settings_screen.dart';
 import 'calculation_method_screen.dart';
@@ -21,6 +23,8 @@ class SettingsScreen extends StatelessWidget {
     final calculationMethodSettings = Provider.of<CalculationMethodSettings>(context);
     final themeSettings = Provider.of<AppThemeSettings>(context);
     final fontSettings = Provider.of<PrayerFontSettings>(context);
+    final prayerThemeProvider = Provider.of<PrayerThemeProvider>(context);
+    final ramadanSettings = Provider.of<RamadanReminderSettings>(context);
     
     return Scaffold(
       body: SafeArea(
@@ -182,6 +186,25 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: Text(timeFormatSettings.is24Hour ? '24-hour' : '12-hour'),
                   ),
                   Divider(),
+
+                  // Ramadan Theme Preview
+                  SwitchListTile(
+                    title: const Text('Preview Ramadan Theme'),
+                    subtitle: const Text('Force Ramadan visuals year-round'),
+                    value: prayerThemeProvider.ramadanPreviewEnabled,
+                    onChanged: (val) async => prayerThemeProvider.setRamadanPreview(val),
+                  ),
+                  Divider(),
+
+                  // Ramadan Reminders
+                  ListTile(
+                    leading: const Icon(Icons.nightlight_round, color: Colors.amber),
+                    title: const Text('Ramadan Reminders'),
+                    subtitle: const Text('Suhoor repeats, Iftar alert'),
+                    onTap: () => _showRamadanRemindersSheet(context, ramadanSettings),
+                    trailing: const Icon(Icons.arrow_forward_ios),
+                  ),
+                  Divider(),
                   
                   // Theme Mode
                   ListTile(
@@ -299,6 +322,112 @@ class SettingsScreen extends StatelessWidget {
           Navigator.pop(context);
         },
       ),
+    );
+  }
+
+  void _showRamadanRemindersSheet(
+    BuildContext context,
+    RamadanReminderSettings settings,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.nightlight_round, color: Colors.amber),
+                  SizedBox(width: 8),
+                  Text('Ramadan Reminders', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Suhoor reminders'),
+                subtitle: const Text('Repeat until Fajr from 1 hour before'),
+                value: settings.suhoorEnabled,
+                onChanged: (val) => settings.setSuhoorEnabled(val),
+              ),
+              if (settings.suhoorEnabled) ...[
+                const SizedBox(height: 4),
+                const Text('Repeat every'),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    _intervalChip(ctx, settings, 5),
+                    const SizedBox(width: 8),
+                    _intervalChip(ctx, settings, 10),
+                    const SizedBox(width: 8),
+                    _intervalChip(ctx, settings, 15),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Start before Fajr'),
+                    Text('${settings.suhoorStartMinutesBeforeFajr} min'),
+                  ],
+                ),
+                Slider(
+                  value: settings.suhoorStartMinutesBeforeFajr.toDouble(),
+                  min: 30,
+                  max: 90,
+                  divisions: 12,
+                  label: '${settings.suhoorStartMinutesBeforeFajr} min',
+                  onChanged: (v) => settings.setSuhoorStartMinutesBeforeFajr(v.round()),
+                ),
+              ],
+              const Divider(),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Iftar alert'),
+                subtitle: Text('Single alert ${settings.iftarMinutesBeforeMaghrib} min before Maghrib'),
+                value: settings.iftarEnabled,
+                onChanged: (val) => settings.setIftarEnabled(val),
+              ),
+              if (settings.iftarEnabled) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Alert before Maghrib'),
+                    Text('${settings.iftarMinutesBeforeMaghrib} min'),
+                  ],
+                ),
+                Slider(
+                  value: settings.iftarMinutesBeforeMaghrib.toDouble(),
+                  min: 5,
+                  max: 20,
+                  divisions: 3,
+                  label: '${settings.iftarMinutesBeforeMaghrib} min',
+                  onChanged: (v) => settings.setIftarMinutesBeforeMaghrib(v.round()),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _intervalChip(BuildContext ctx, RamadanReminderSettings settings, int minutes) {
+    final selected = settings.suhoorIntervalMinutes == minutes;
+    final color = Theme.of(ctx).colorScheme.primary;
+    return ChoiceChip(
+      label: Text('$minutes min'),
+      selected: selected,
+      selectedColor: color.withOpacity(0.15),
+      labelStyle: TextStyle(color: selected ? color : null),
+      onSelected: (_) => settings.setSuhoorIntervalMinutes(minutes),
     );
   }
 }

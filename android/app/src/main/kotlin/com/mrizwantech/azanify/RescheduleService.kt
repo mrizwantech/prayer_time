@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import android.content.pm.ServiceInfo
 import androidx.core.app.NotificationCompat
 import com.batoulapps.adhan.*
 import com.batoulapps.adhan.data.DateComponents
@@ -33,7 +34,15 @@ class RescheduleService : Service() {
         
         // Start foreground immediately to avoid ForegroundServiceDidNotStartInTimeException
         val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
         
         // Do the rescheduling work
         Thread {

@@ -78,6 +78,7 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
   Widget build(BuildContext context) {
     final prayerService = Provider.of<PrayerTimeService>(context);
     final timeSettings = Provider.of<TimeFormatSettings>(context);
+    final theme = Theme.of(context);
 
     final daysInMonth = DateUtils.getDaysInMonth(_focusedMonth.year, _focusedMonth.month);
     final firstWeekday = DateTime(_focusedMonth.year, _focusedMonth.month, 1).weekday; // 1=Mon
@@ -168,6 +169,10 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
                     final hijri = HijriDate.fromDate(date);
                     final isHijriMonthStart = hijri.hDay == 1;
                     final isHijriDay20 = hijri.hDay == 20;
+                    final isRamadanDay = hijri.hMonth == 9;
+                    final ramadanTimes = isRamadanDay
+                        ? prayerService.getPrayerTimesForDate(date)
+                        : null;
                     return GestureDetector(
                       onTap: () {
                         setState(() {
@@ -186,62 +191,75 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
                           border: Border.all(
                             color: isSelected
                                 ? Colors.teal.shade800
-                                : isHijriMonthStart
-                                    ? Colors.amber.shade600
-                                    : isHijriDay20
-                                        ? Colors.teal.shade400
-                                        : Colors.grey.shade300,
-                            width: isSelected || isHijriMonthStart ? 1.6 : 1,
+                                : isRamadanDay
+                                    ? Colors.amber.shade500
+                                    : isHijriMonthStart
+                                        ? Colors.amber.shade600
+                                        : isHijriDay20
+                                            ? Colors.teal.shade400
+                                            : Colors.grey.shade300,
+                            width: isSelected || isRamadanDay || isHijriMonthStart ? 1.6 : 1,
                           ),
                         ),
                         child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '${date.day}',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : isToday
-                                          ? Colors.teal.shade900
-                                          : Colors.grey.shade800,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${hijri.hDay}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isSelected
-                                      ? Colors.white.withOpacity(0.85)
-                                      : isHijriMonthStart
-                                          ? Colors.amber.shade700
-                                          : Colors.grey.shade600,
-                                ),
-                              ),
-                              if (isHijriMonthStart || isHijriDay20)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        width: 7,
-                                        height: 7,
-                                        decoration: BoxDecoration(
-                                          color: isHijriMonthStart
-                                              ? Colors.amber.shade600
-                                              : Colors.teal.shade500,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                    ],
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '${date.day}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : isToday
+                                            ? Colors.teal.shade900
+                                            : Colors.grey.shade800,
                                   ),
                                 ),
-                            ],
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${hijri.hDay}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isSelected
+                                        ? Colors.white.withOpacity(0.85)
+                                        : isHijriMonthStart
+                                            ? Colors.amber.shade700
+                                            : Colors.grey.shade600,
+                                  ),
+                                ),
+                                if (isHijriMonthStart || isHijriDay20 || isRamadanDay)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        if (hijri.hDay == 1)
+                                          Icon(Icons.nightlight_round, size: 14, color: Colors.amber.shade700)
+                                        else if (hijri.hDay == 27)
+                                          Icon(Icons.emoji_objects, size: 14, color: Colors.orange.shade700)
+                                        else
+                                          Container(
+                                            width: 7,
+                                            height: 7,
+                                            decoration: BoxDecoration(
+                                              color: isRamadanDay
+                                                  ? Colors.amber.shade600
+                                                  : isHijriMonthStart
+                                                      ? Colors.amber.shade600
+                                                      : Colors.teal.shade500,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -252,7 +270,7 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
             ),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
               decoration: BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
@@ -273,29 +291,29 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
                       children: [
                         Text(
                           'Prayer times for ${DateFormat('EEE, MMM d, yyyy').format(_selectedDate)}',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                         ),
                         Text(
                           'Hijri: ${HijriDate.fromDate(_selectedDate).toFormat('dd MMMM yyyy')}',
-                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                          style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         if (HijriDate.fromDate(_selectedDate).hMonth == 9)
                           Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
+                            spacing: 6,
+                            runSpacing: 4,
                             children: [
                               _infoChip('Suhoor ends (Fajr)', _selectedTimes!['Fajr']!, timeSettings.is24Hour, Colors.amber.shade200),
                               _infoChip('Iftar (Maghrib)', _selectedTimes!['Maghrib']!, timeSettings.is24Hour, Colors.teal.shade200),
                             ],
                           ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
+                          spacing: 6,
+                          runSpacing: 4,
                           children: _selectedTimes!.entries.map((e) {
                             return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                               decoration: BoxDecoration(
                                 color: Colors.teal.shade50,
                                 borderRadius: BorderRadius.circular(12),
@@ -324,27 +342,45 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
                             );
                           }).toList(),
                         ),
-                        const SizedBox(height: 8),
-                        ..._selectedTimes!.entries.map(
-                          (e) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(e.key, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                Text(
-                                  _formatTime(e.value, timeSettings.is24Hour),
-                                  style: const TextStyle(fontFeatures: []),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
                       ],
                     ),
             ),
           ],
         ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0,
+        onTap: (idx) {
+          // navigate via root bottom nav indices
+          switch (idx) {
+            case 0:
+              Navigator.of(context).popUntil((route) => route.isFirst);
+              break;
+            case 1:
+              Navigator.of(context).pushNamed('/tasbeeh');
+              break;
+            case 2:
+              Navigator.of(context).pushNamed('/qibla');
+              break;
+            case 3:
+              Navigator.of(context).pushNamed('/tracker');
+              break;
+            case 4:
+              Navigator.of(context).pushNamed('/settings');
+              break;
+          }
+        },
+        selectedItemColor: theme.colorScheme.primary,
+        unselectedItemColor: theme.colorScheme.onSurface.withOpacity(0.5),
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: theme.colorScheme.surface,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.radio_button_checked), label: 'Tasbeeh'),
+          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
+          BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'RakatTracker'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+        ],
       ),
     );
   }

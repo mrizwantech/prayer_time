@@ -234,7 +234,7 @@ class _CalculationMethodScreenState extends State<CalculationMethodScreen> {
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
             BottomNavigationBarItem(icon: Icon(Icons.radio_button_checked), label: 'Tasbeeh'),
             BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
-            BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'Tracker'),
+            BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'RakatTracker'),
             BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
           ],
         ),

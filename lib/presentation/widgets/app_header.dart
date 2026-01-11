@@ -9,6 +9,8 @@ class AppHeader extends StatelessWidget {
   final String? title; // Optional title for sub-pages
   final bool showBackButton;
   final bool showLocation;
+  final VoidCallback? onSupport;
+  final bool showSupport;
 
   const AppHeader({
     super.key,
@@ -19,6 +21,8 @@ class AppHeader extends StatelessWidget {
     this.title,
     this.showBackButton = false,
     this.showLocation = true,
+    this.onSupport,
+    this.showSupport = false,
   });
 
   @override
@@ -26,9 +30,10 @@ class AppHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final accentColor = theme.colorScheme.primary;
-    final backgroundColor = isDark ? const Color(0xFF1a1d2e) : theme.colorScheme.surface;
-    final surfaceColor = isDark ? const Color(0xFF252836) : theme.colorScheme.surface;
-    final textColor = isDark ? Colors.white : theme.colorScheme.onSurface;
+    // Force white background and black text for light theme
+    final backgroundColor = isDark ? const Color(0xFF1a1d2e) : Colors.white;
+    final surfaceColor = isDark ? const Color(0xFF252836) : Colors.white;
+    final textColor = isDark ? Colors.white : Colors.black;
     
     // Determine the location text only if we have data
     String? locationText;
@@ -161,6 +166,40 @@ class AppHeader extends StatelessWidget {
                 constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
               ),
             ),
+
+          if (showSupport && onSupport != null) ...[
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: textColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.favorite_outline,
+                      color: accentColor,
+                    ),
+                    onPressed: onSupport,
+                    padding: const EdgeInsets.all(8),
+                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                    tooltip: 'Support',
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Support',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: textColor.withOpacity(0.8),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
