@@ -67,7 +67,7 @@ class PostPreviewWidget extends StatelessWidget {
                   physics: const BouncingScrollPhysics(),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Arabic text
                       if (editor.textStyle.showArabic &&

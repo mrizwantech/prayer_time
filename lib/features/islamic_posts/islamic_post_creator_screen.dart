@@ -794,7 +794,7 @@ class _DuaQuickCard extends StatelessWidget {
 }
 
 // Quick style picker
-class _QuickStylePicker extends StatelessWidget {
+class _QuickStylePicker extends StatefulWidget {
   final PostEditorProvider editor;
   final VoidCallback onClose;
 
@@ -802,6 +802,54 @@ class _QuickStylePicker extends StatelessWidget {
     required this.editor,
     required this.onClose,
   });
+
+  @override
+  State<_QuickStylePicker> createState() => _QuickStylePickerState();
+}
+
+class _QuickStylePickerState extends State<_QuickStylePicker> {
+  @override
+  void initState() {
+    super.initState();
+    widget.editor.addListener(_onEditorChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.editor.removeListener(_onEditorChanged);
+    super.dispose();
+  }
+
+  void _onEditorChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Widget _buildAlignmentButton(
+    BuildContext context,
+    IconData icon,
+    TextAlign alignment,
+    bool isSelected,
+    VoidCallback onTap,
+  ) {
+    final theme = Theme.of(context);
+    return Material(
+      color: isSelected ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Icon(
+            icon,
+            color: isSelected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+
+  PostEditorProvider get editor => widget.editor;
 
   @override
   Widget build(BuildContext context) {
@@ -843,7 +891,7 @@ class _QuickStylePicker extends StatelessWidget {
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                     const Spacer(),
-                    IconButton(icon: const Icon(Icons.close), onPressed: onClose),
+                    IconButton(icon: const Icon(Icons.close), onPressed: widget.onClose),
                   ],
                 ),
               ),
@@ -955,6 +1003,46 @@ class _QuickStylePicker extends StatelessWidget {
                   ],
                 ),
               ),
+
+              // Text alignment
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Text Alignment', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _buildAlignmentButton(
+                          context,
+                          Icons.format_align_left,
+                          TextAlign.left,
+                          editor.textStyle.textAlignment == TextAlign.left,
+                          () => editor.updateTextStyle(textAlignment: TextAlign.left),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildAlignmentButton(
+                          context,
+                          Icons.format_align_center,
+                          TextAlign.center,
+                          editor.textStyle.textAlignment == TextAlign.center,
+                          () => editor.updateTextStyle(textAlignment: TextAlign.center),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildAlignmentButton(
+                          context,
+                          Icons.format_align_right,
+                          TextAlign.right,
+                          editor.textStyle.textAlignment == TextAlign.right,
+                          () => editor.updateTextStyle(textAlignment: TextAlign.right),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
             ],
           ),
         );
