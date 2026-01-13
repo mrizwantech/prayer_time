@@ -8,12 +8,12 @@ class PrayerCountdownTimer extends StatefulWidget {
   final double? fontSize;
 
   const PrayerCountdownTimer({
-    Key? key,
+    super.key,
     required this.nextPrayerTime,
     required this.nextPrayerName,
     this.textColor,
     this.fontSize,
-  }) : super(key: key);
+  });
 
   @override
   State<PrayerCountdownTimer> createState() => _PrayerCountdownTimerState();

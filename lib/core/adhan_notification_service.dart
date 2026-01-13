@@ -2,7 +2,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:adhan/adhan.dart';
@@ -924,14 +923,12 @@ class AdhanNotificationService {
       } else {
         // Try last known first, then current with lowest accuracy
         Position? position = await Geolocator.getLastKnownPosition();
-        if (position == null) {
-          position = await Geolocator.getCurrentPosition(
+        position ??= await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.lowest,
               timeLimit: Duration(seconds: 5),
             ),
           );
-        }
         lat = position.latitude;
         lng = position.longitude;
         debugPrint('Fetched location: $lat, $lng');

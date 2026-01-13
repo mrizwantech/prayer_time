@@ -25,6 +25,7 @@ class _IslamicPostCreatorScreenState extends State<IslamicPostCreatorScreen> {
   final PostEditorProvider _editor = PostEditorProvider();
   bool _isSaving = false;
   bool _showMoreOptions = false;
+  int _currentStep = 0; // 0 = background, 1 = content, 2 = style/share
 
   @override
   void initState() {
@@ -126,6 +127,33 @@ class _IslamicPostCreatorScreenState extends State<IslamicPostCreatorScreen> {
     );
   }
 
+  void _nextStep() {
+    if (_currentStep == 1 && _editor.content.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please pick content before continuing')),
+      );
+      return;
+    }
+    setState(() => _currentStep = (_currentStep + 1).clamp(0, 2));
+  }
+
+  void _prevStep() {
+    setState(() => _currentStep = (_currentStep - 1).clamp(0, 2));
+  }
+
+  String get _stepLabel {
+    switch (_currentStep) {
+      case 0:
+        return 'Select background & size';
+      case 1:
+        return 'Pick content';
+      case 2:
+        return 'Style & share';
+      default:
+        return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -145,16 +173,17 @@ class _IslamicPostCreatorScreenState extends State<IslamicPostCreatorScreen> {
               title: 'Create Post',
             ),
 
-            // Main content area
+            // Main content area per step
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Preview - takes most space
+                    // Preview
                     Container(
                       constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.4,
+                        maxHeight: MediaQuery.of(context).size.height * 0.45,
                       ),
                       child: Center(
                         child: PostPreviewWidget(
@@ -164,135 +193,245 @@ class _IslamicPostCreatorScreenState extends State<IslamicPostCreatorScreen> {
                       ),
                     ),
 
-                    const SizedBox(height: 20),
 
-                    // Simple 2-button action row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ActionButton(
-                            icon: Icons.menu_book,
-                            label: 'Pick Content',
-                            sublabel: _editor.content.isEmpty 
-                                ? 'Duas & Quotes' 
-                                : 'Content selected ✓',
-                            onTap: _showContentPicker,
-                            isPrimary: _editor.content.isEmpty,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _ActionButton(
-                            icon: Icons.palette,
-                            label: 'Change Style',
-                            sublabel: 'Colors & Layout',
-                            onTap: _showStylePicker,
-                            isPrimary: false,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Quick style presets (horizontal scroll)
-                    SizedBox(
-                      height: 70,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: PostTemplate.templates.length,
-                        itemBuilder: (context, index) {
-                          final template = PostTemplate.templates[index];
-                          final isSelected = _editor.selectedTemplate?.id == template.id;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: GestureDetector(
-                              onTap: () => _editor.applyTemplate(template),
-                              child: Container(
-                                width: 70,
-                                decoration: BoxDecoration(
-                                  gradient: template.gradient?.toGradient() ?? 
-                                      GradientPreset.presets[0].toGradient(),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: isSelected
-                                      ? Border.all(color: theme.colorScheme.primary, width: 3)
-                                      : null,
-                                  boxShadow: isSelected
-                                      ? [BoxShadow(
-                                          color: theme.colorScheme.primary.withAlpha(80),
-                                          blurRadius: 8,
-                                          spreadRadius: 1,
-                                        )]
-                                      : null,
-                                ),
-                                child: Center(
-                                  child: Icon(
-                                    Icons.check,
-                                    color: isSelected ? Colors.white : Colors.transparent,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-
-                    // More options toggle
-                    if (_showMoreOptions) ...[
-                      const SizedBox(height: 16),
-                      _MoreOptionsSection(editor: _editor),
-                    ],
-
-                    TextButton.icon(
-                      onPressed: () => setState(() => _showMoreOptions = !_showMoreOptions),
-                      icon: Icon(_showMoreOptions ? Icons.expand_less : Icons.expand_more),
-                      label: Text(_showMoreOptions ? 'Less Options' : 'More Options'),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: _buildStepContent(theme),
                     ),
                   ],
                 ),
               ),
             ),
 
-            // Share button - always visible at bottom
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(25),
-                    blurRadius: 10,
-                    offset: const Offset(0, -2),
-                  ),
-                ],
+            _buildBottomBar(theme),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepContent(ThemeData theme) {
+    switch (_currentStep) {
+      case 0:
+        return Column(
+          key: const ValueKey('step0'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Choose a background or gradient'),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 90,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: PostTemplate.templates.length,
+                itemBuilder: (context, index) {
+                  final template = PostTemplate.templates[index];
+                  final isSelected = _editor.selectedTemplate?.id == template.id;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () => _editor.applyTemplate(template),
+                      child: Container(
+                        width: 80,
+                        decoration: BoxDecoration(
+                          gradient: template.gradient?.toGradient() ??
+                              GradientPreset.presets[0].toGradient(),
+                          borderRadius: BorderRadius.circular(14),
+                          border: isSelected
+                              ? Border.all(color: theme.colorScheme.primary, width: 3)
+                              : null,
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: theme.colorScheme.primary.withAlpha(80),
+                                    blurRadius: 8,
+                                    spreadRadius: 1,
+                                  )
+                                ]
+                              : null,
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.check,
+                            color: isSelected ? Colors.white : Colors.transparent,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
-              child: SafeArea(
-                top: false,
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _editor.content.isEmpty || _isSaving ? null : _sharePost,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.share),
-                    label: Text(
-                      _isSaving ? 'Creating...' : 'Share Post',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      disabledBackgroundColor: theme.colorScheme.primary.withAlpha(100),
-                    ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: PostAspectRatio.values.map((ratio) {
+                final isSelected = _editor.aspectRatio == ratio;
+                return ChoiceChip(
+                  label: Text(ratio.displayName),
+                  avatar: Icon(ratio.icon, size: 16),
+                  selected: isSelected,
+                  onSelected: (_) => _editor.setAspectRatio(ratio),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      case 1:
+        return Column(
+          key: const ValueKey('step1'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ActionButton(
+              label: 'Pick Content',
+              sublabel: _editor.content.isEmpty
+                  ? 'Duas, quotes, or custom'
+                  : 'Content selected ✓',
+              onTap: _showContentPicker,
+              isPrimary: _editor.content.isEmpty,
+            ),
+            const SizedBox(height: 12),
+            if (!_editor.content.isEmpty)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Selected content', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      if (_editor.content.arabicText.isNotEmpty)
+                        Text(_editor.content.arabicText, textDirection: TextDirection.rtl),
+                      if (_editor.content.translationText.isNotEmpty)
+                        Text(_editor.content.translationText, style: const TextStyle(fontSize: 12)),
+                      if (_editor.content.referenceText.isNotEmpty)
+                        Text(_editor.content.referenceText, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    ],
                   ),
                 ),
               ),
+          ],
+        );
+      case 2:
+      default:
+        return Column(
+          key: const ValueKey('step2'),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ActionButton(
+              label: 'Change Style',
+              sublabel: 'Colors & layout',
+              onTap: _showStylePicker,
+              isPrimary: false,
+            ),
+            const SizedBox(height: 12),
+            const Text('Quick themes'),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 70,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: PostTemplate.templates.length,
+                itemBuilder: (context, index) {
+                  final template = PostTemplate.templates[index];
+                  final isSelected = _editor.selectedTemplate?.id == template.id;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: GestureDetector(
+                      onTap: () => _editor.applyTemplate(template),
+                      child: Container(
+                        width: 70,
+                        decoration: BoxDecoration(
+                          gradient: template.gradient?.toGradient() ??
+                              GradientPreset.presets[0].toGradient(),
+                          borderRadius: BorderRadius.circular(12),
+                          border: isSelected
+                              ? Border.all(color: theme.colorScheme.primary, width: 3)
+                              : null,
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: theme.colorScheme.primary.withAlpha(80),
+                                    blurRadius: 8,
+                                    spreadRadius: 1,
+                                  )
+                                ]
+                              : null,
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.check,
+                            color: isSelected ? Colors.white : Colors.transparent,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_showMoreOptions) ...[
+              _MoreOptionsSection(editor: _editor),
+              const SizedBox(height: 8),
+            ],
+            TextButton.icon(
+              onPressed: () => setState(() => _showMoreOptions = !_showMoreOptions),
+              icon: Icon(_showMoreOptions ? Icons.expand_less : Icons.expand_more),
+              label: Text(_showMoreOptions ? 'Hide fine-tune' : 'Fine-tune'),
+            ),
+          ],
+        );
+    }
+  }
+
+  Widget _buildBottomBar(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(25),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            if (_currentStep > 0)
+              TextButton(
+                onPressed: _prevStep,
+                child: const Text('Back'),
+              ),
+            if (_currentStep > 0) const SizedBox(width: 8),
+            Expanded(
+              child: _currentStep < 2
+                  ? ElevatedButton(
+                      onPressed: _nextStep,
+                      child: const Text('Continue'),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: _editor.content.isEmpty || _isSaving ? null : _sharePost,
+                      icon: _isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.share),
+                      label: Text(
+                        _isSaving ? 'Creating...' : 'Share Post',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
             ),
           ],
         ),
@@ -303,14 +442,12 @@ class _IslamicPostCreatorScreenState extends State<IslamicPostCreatorScreen> {
 
 // Simple action button widget
 class _ActionButton extends StatelessWidget {
-  final IconData icon;
   final String label;
   final String sublabel;
   final VoidCallback onTap;
   final bool isPrimary;
 
   const _ActionButton({
-    required this.icon,
     required this.label,
     required this.sublabel,
     required this.onTap,
@@ -333,17 +470,13 @@ class _ActionButton extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              Icon(
-                icon,
-                size: 28,
-                color: isPrimary ? theme.colorScheme.primary : theme.colorScheme.onSurface,
-              ),
+           
               const SizedBox(height: 8),
               Text(
                 label,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: isPrimary ? theme.colorScheme.primary : theme.colorScheme.onSurface,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
               Text(
@@ -423,7 +556,6 @@ class _QuickContentPickerState extends State<_QuickContentPicker> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
-                  const Icon(Icons.menu_book),
                   const SizedBox(width: 8),
                   const Text(
                     'Pick Content',

@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import '../core/adhan_sound_service.dart';
 
 class AdhanPlayerScreen extends StatefulWidget {
   final String prayerName;
 
   const AdhanPlayerScreen({
-    Key? key,
+    super.key,
     required this.prayerName,
-  }) : super(key: key);
+  });
 
   @override
   State<AdhanPlayerScreen> createState() => _AdhanPlayerScreenState();

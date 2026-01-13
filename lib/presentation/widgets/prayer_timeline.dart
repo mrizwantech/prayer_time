@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:hijri_date/hijri_date.dart';
 import 'package:hijri_date/hijri.dart';
 import 'package:intl/intl.dart';
 import '../../core/prayer_theme_provider.dart';

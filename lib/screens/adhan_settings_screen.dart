@@ -3,7 +3,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../core/adhan_sound_service.dart';
-import '../core/adhan_notification_service.dart';
 import '../core/prayer_time_service.dart';
 import '../presentation/widgets/app_header.dart';
 
@@ -498,7 +497,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                 },
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
