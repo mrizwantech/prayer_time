@@ -23,6 +23,7 @@ import 'core/app_theme_settings.dart';
 import 'core/prayer_font_settings.dart';
 import 'core/prayer_theme_provider.dart';
 import 'core/ramadan_reminder_settings.dart';
+import 'core/quran_provider.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 // Global navigator key for navigation from anywhere
@@ -110,6 +111,7 @@ void main() async {
           ChangeNotifierProvider.value(value: appThemeSettings),
           ChangeNotifierProvider.value(value: prayerThemeProvider),
           ChangeNotifierProvider.value(value: ramadanReminderSettings),
+          ChangeNotifierProvider(create: (_) => QuranProvider()..loadSurahs()),
         ],
         child: MyApp(
           initialPrayerName: initialPrayerName,
