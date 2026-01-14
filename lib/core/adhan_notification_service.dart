@@ -2,7 +2,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:adhan/adhan.dart';
@@ -187,15 +186,20 @@ class AdhanNotificationService {
     debugPrint('   Sound enabled for $prayerName: $shouldPlaySound');
 
     try {
-      // Schedule Android alarm. For test button (prayerName == 'Test'), schedule at the provided time.
-      // For normal prayers, rely on native single-next chaining for reliability.
+      // Schedule Android alarm. For test buttons (Test or specific prayer tests), schedule at the provided time.
+      // For normal prayers during regular scheduling, rely on native single-next chaining for reliability.
       if (shouldPlaySound) {
         try {
           final selectedAdhan = await _soundService.getSelectedAdhan();
-          if (prayerName.toLowerCase() == 'test') {
+          // Use direct alarm scheduling for test prayers OR if this is an Isha test (id 997)
+          // Regular prayers use scheduleNextPrayer for chaining
+          final isTestAlarm = prayerName.toLowerCase() == 'test' || id == 997 || id == 998;
+          if (isTestAlarm) {
+            // Use Fajr adhan for Fajr, selected adhan for others
+            final soundFile = prayerName.toLowerCase() == 'fajr' ? 'fajr' : selectedAdhan;
             await platform.invokeMethod('scheduleAdhanAlarm', {
               'prayerName': prayerName,
-              'soundFile': selectedAdhan,
+              'soundFile': soundFile,
               'triggerTime': scheduledTime.millisecondsSinceEpoch,
               'requestCode': id,
             });
@@ -924,14 +928,12 @@ class AdhanNotificationService {
       } else {
         // Try last known first, then current with lowest accuracy
         Position? position = await Geolocator.getLastKnownPosition();
-        if (position == null) {
-          position = await Geolocator.getCurrentPosition(
+        position ??= await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.lowest,
               timeLimit: Duration(seconds: 5),
             ),
           );
-        }
         lat = position.latitude;
         lng = position.longitude;
         debugPrint('Fetched location: $lat, $lng');

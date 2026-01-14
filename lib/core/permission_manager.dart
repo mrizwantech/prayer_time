@@ -14,17 +14,35 @@ class PermissionManager {
     
     bool allGranted = true;
 
-    // 1. Request Location Permission
+    // 1. Request Location Permission with timeout
     debugPrint('Requesting location permission...');
-    final locationGranted = await _requestLocationPermission();
-    debugPrint('Location permission: ${locationGranted ? "GRANTED" : "DENIED"}');
-    allGranted = allGranted && locationGranted;
+    try {
+      final locationGranted = await _requestLocationPermission()
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        debugPrint('Location permission request timed out');
+        return false;
+      });
+      debugPrint('Location permission: ${locationGranted ? "GRANTED" : "DENIED"}');
+      allGranted = allGranted && locationGranted;
+    } catch (e) {
+      debugPrint('Location permission error: $e');
+      allGranted = false;
+    }
 
-    // 2. Request Notification Permissions
+    // 2. Request Notification Permissions with timeout
     debugPrint('Requesting notification permissions...');
-    final notificationGranted = await _requestNotificationPermissions();
-    debugPrint('Notification permission: ${notificationGranted ? "GRANTED" : "DENIED"}');
-    allGranted = allGranted && notificationGranted;
+    try {
+      final notificationGranted = await _requestNotificationPermissions()
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        debugPrint('Notification permission request timed out');
+        return false;
+      });
+      debugPrint('Notification permission: ${notificationGranted ? "GRANTED" : "DENIED"}');
+      allGranted = allGranted && notificationGranted;
+    } catch (e) {
+      debugPrint('Notification permission error: $e');
+      allGranted = false;
+    }
 
     debugPrint('=== All Permissions ${allGranted ? "GRANTED" : "INCOMPLETE"} ===');
     return allGranted;
@@ -36,6 +54,7 @@ class PermissionManager {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         debugPrint('Location services are disabled');
+        // Don't block on this - user can enable later
         return false;
       }
 

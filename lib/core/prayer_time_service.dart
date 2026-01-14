@@ -160,15 +160,21 @@ class PrayerTimeService extends ChangeNotifier {
     debugPrint('📍 PrayerTimeService: Fetching location...');
 
     // Ensure location services are on (emulators sometimes have them off)
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled()
+        .timeout(const Duration(seconds: 10), onTimeout: () => false);
     if (!serviceEnabled) {
       throw Exception('Location services are disabled. Please enable location on the device/emulator.');
     }
     
-    // Check permission
-    LocationPermission permission = await Geolocator.checkPermission();
+    // Check permission with timeout
+    LocationPermission permission = await Geolocator.checkPermission()
+        .timeout(const Duration(seconds: 10), onTimeout: () => LocationPermission.denied);
     if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+      permission = await Geolocator.requestPermission()
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        debugPrint('⏳ Location permission request timed out');
+        return LocationPermission.denied;
+      });
       if (permission == LocationPermission.denied) {
         throw Exception('Location permission denied');
       }
@@ -198,13 +204,14 @@ class PrayerTimeService extends ChangeNotifier {
       }
     }
 
-    // Second attempt without time limit if still null
+    // Second attempt with longer time limit if still null
     if (position == null) {
       try {
-        debugPrint('📍 Getting current position (attempt 2, no timeout)...');
+        debugPrint('📍 Getting current position (attempt 2)...');
         position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.low,
+            timeLimit: Duration(seconds: 30),
           ),
         );
       } catch (e) {

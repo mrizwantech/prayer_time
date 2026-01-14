@@ -45,10 +45,19 @@ object PrayerScheduler {
             "Isha" to todayTimes.isha
         )
 
+        Log.d("PrayerScheduler", "Today's prayers:")
+        todayPrayers.forEach { (name, time) ->
+            val isPast = time.time <= now
+            Log.d("PrayerScheduler", "  $name: ${Date(time.time)} ${if (isPast) "(PASSED)" else "(UPCOMING)"}")
+        }
+
         todayPrayers.firstOrNull { it.second.time > now }?.let {
+            Log.d("PrayerScheduler", "✅ Next prayer to schedule: ${it.first} at ${Date(it.second.time)}")
             scheduleAlarm(context, it.first, it.second.time)
             return
         }
+        
+        Log.d("PrayerScheduler", "⚠️ All today's prayers passed, scheduling tomorrow's Fajr")
 
         // All passed -> schedule tomorrow Fajr
         val tomorrow = DateComponents.from(Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000))

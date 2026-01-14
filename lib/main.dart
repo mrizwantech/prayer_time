@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'screens/home_screen.dart';
 import 'screens/qibla_screen.dart';
 import 'screens/settings_screen.dart';
@@ -23,6 +25,8 @@ import 'core/app_theme_settings.dart';
 import 'core/prayer_font_settings.dart';
 import 'core/prayer_theme_provider.dart';
 import 'core/ramadan_reminder_settings.dart';
+import 'core/quran_provider.dart';
+import 'core/analytics_service.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 // Global navigator key for navigation from anywhere
@@ -31,6 +35,21 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
+
+  // Initialize Firebase
+  try {
+    await Firebase.initializeApp();
+    debugPrint('🔥 Firebase initialized successfully');
+    
+    // Initialize Crashlytics
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    debugPrint('🔥 Crashlytics initialized');
+    
+    // Log app open
+    AnalyticsService().logAppOpen();
+  } catch (e) {
+    debugPrint('❌ Firebase initialization error: $e');
+  }
 
   // Initialize timezone database for notifications
   tz.initializeTimeZones();
@@ -110,6 +129,7 @@ void main() async {
           ChangeNotifierProvider.value(value: appThemeSettings),
           ChangeNotifierProvider.value(value: prayerThemeProvider),
           ChangeNotifierProvider.value(value: ramadanReminderSettings),
+          ChangeNotifierProvider(create: (_) => QuranProvider()..loadSurahs()),
         ],
         child: MyApp(
           initialPrayerName: initialPrayerName,
@@ -244,13 +264,20 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
 
   Future<void> _loadEverything() async {
     try {
-      // Step 1: Request permissions
+      // Step 1: Request permissions (with timeout to not block forever)
       setState(() {
         _statusMessage = 'Requesting permissions...';
       });
 
       final permissionManager = PermissionManager();
-      await permissionManager.requestAllPermissions();
+      // Don't block forever on permissions - user can grant later
+      await permissionManager.requestAllPermissions()
+          .timeout(const Duration(seconds: 45), onTimeout: () {
+        debugPrint('Permission request timed out during splash, continuing...');
+        return false;
+      });
+
+      if (!mounted) return;
 
       // Step 2: Initialize PrayerTimeService (location + prayer times + notifications)
       setState(() {
@@ -261,7 +288,14 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
         context,
         listen: false,
       );
-      await prayerTimeService.initialize();
+      
+      // Also add timeout for prayer time initialization
+      await prayerTimeService.initialize()
+          .timeout(const Duration(seconds: 30), onTimeout: () {
+        debugPrint('Prayer time initialization timed out, continuing...');
+      });
+
+      if (!mounted) return;
 
       // If an adhan launch is pending/active, stay put so we don't pop to home
       final notificationService = AdhanNotificationService();
@@ -449,97 +483,121 @@ class _MainNavigationState extends State<MainNavigation> {
   void initState() {
     super.initState();
     selectedIndex = widget.initialIndex;
-    // Request all permissions on app launch
+    // Request all permissions on app launch (don't await to avoid blocking UI)
     _requestAllPermissions();
   }
 
   Future<void> _requestAllPermissions() async {
-    final permissionManager = PermissionManager();
+    try {
+      final permissionManager = PermissionManager();
 
-    // Request all permissions at once
-    final allGranted = await permissionManager.requestAllPermissions();
+      // Request all permissions at once with overall timeout
+      final allGranted = await permissionManager.requestAllPermissions()
+          .timeout(const Duration(seconds: 60), onTimeout: () {
+        debugPrint('Permission request timed out overall');
+        return false;
+      });
 
-    if (allGranted) {
-      debugPrint('All permissions granted!');
-      // Note: Prayer notifications are already scheduled by PrayerTimeService
-      // during initialization, so we don't need to schedule them again here.
+      if (!mounted) return;
 
-      // Show overlay permission prompt first (most important for auto-launch)
-      await _checkOverlayPermission();
+      if (allGranted) {
+        debugPrint('All permissions granted!');
+        // Note: Prayer notifications are already scheduled by PrayerTimeService
+        // during initialization, so we don't need to schedule them again here.
 
-      // Then show battery optimization prompt
-      _checkBatteryOptimization();
-    } else {
-      debugPrint('Some permissions were not granted');
-      // Show alert explaining why permissions are needed
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: Row(
-              children: [
-                Icon(
-                  Icons.warning_amber_rounded,
-                  color: Colors.orange,
-                  size: 28,
-                ),
-                SizedBox(width: 8),
-                Expanded(child: Text('Permissions Required')),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Azanify needs the following permissions to work properly:',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-                ),
-                SizedBox(height: 16),
-                _buildPermissionItem(
-                  Icons.notifications,
-                  'Notifications',
-                  'To alert you at prayer times',
-                ),
-                _buildPermissionItem(
-                  Icons.location_on,
-                  'Location',
-                  'To calculate accurate prayer times for your area',
-                ),
-                _buildPermissionItem(
-                  Icons.alarm,
-                  'Exact Alarms',
-                  'To notify you at the precise prayer time',
-                ),
-                SizedBox(height: 16),
-                Text(
-                  'Without these permissions, you will not receive prayer time notifications.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.red.shade700,
-                    fontWeight: FontWeight.w500,
+        // Show overlay permission prompt first (most important for auto-launch)
+        if (mounted) {
+          await _checkOverlayPermission();
+        }
+
+        // Then show battery optimization prompt
+        if (mounted) {
+          _checkBatteryOptimization();
+        }
+      } else {
+        debugPrint('Some permissions were not granted');
+        // Show alert explaining why permissions are needed
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: true, // Allow dismissing by tapping outside
+            builder: (context) => AlertDialog(
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.orange,
+                    size: 28,
                   ),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('Permissions Required')),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Azanify needs the following permissions to work properly:',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                  ),
+                  SizedBox(height: 16),
+                  _buildPermissionItem(
+                    Icons.notifications,
+                    'Notifications',
+                    'To alert you at prayer times',
+                  ),
+                  _buildPermissionItem(
+                    Icons.location_on,
+                    'Location',
+                    'To calculate accurate prayer times for your area',
+                  ),
+                  _buildPermissionItem(
+                    Icons.alarm,
+                    'Exact Alarms',
+                    'To notify you at the precise prayer time',
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Without these permissions, you will not receive prayer time notifications.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.red.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await _requestAllPermissions(); // Try again
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text('Grant Permissions'),
                 ),
               ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await _requestAllPermissions(); // Try again
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                ),
-                child: Text('Grant Permissions'),
-              ),
-            ],
+          );
+        }
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Error requesting permissions: $e');
+      debugPrint('Stack trace: $stackTrace');
+      // Don't block the app if permissions fail
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Permission request failed. You can grant permissions later in Settings.'),
+            duration: Duration(seconds: 3),
           ),
         );
       }

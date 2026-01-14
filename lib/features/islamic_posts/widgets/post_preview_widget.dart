@@ -22,7 +22,9 @@ class PostPreviewWidget extends StatelessWidget {
         aspectRatio: editor.aspectRatio.ratio,
         child: Container(
           decoration: _buildBackgroundDecoration(),
+          clipBehavior: Clip.hardEdge, 
           child: Stack(
+            clipBehavior: Clip.hardEdge,
             children: [
               // Pattern overlay
               if (editor.background.patternType != PatternType.none)
@@ -31,7 +33,7 @@ class PostPreviewWidget extends StatelessWidget {
                     painter: IslamicPatternPainter(
                       patternType: editor.background.patternType,
                       color: editor.background.patternColor
-                          .withOpacity(editor.background.patternOpacity),
+                          .withAlpha((editor.background.patternOpacity * 255).toInt()),
                     ),
                   ),
                 ),
@@ -60,15 +62,17 @@ class PostPreviewWidget extends StatelessWidget {
 
               // Main content
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Arabic text
-                    if (editor.textStyle.showArabic && 
-                        editor.content.arabicText.isNotEmpty)
-                      Flexible(
-                        child: Text(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Arabic text
+                      if (editor.textStyle.showArabic &&
+                          editor.content.arabicText.isNotEmpty) ...[
+                        Text(
                           editor.content.arabicText,
                           style: TextStyle(
                             fontSize: editor.textStyle.arabicFontSize,
@@ -80,59 +84,65 @@ class PostPreviewWidget extends StatelessWidget {
                           ),
                           textAlign: editor.textStyle.textAlignment,
                           textDirection: TextDirection.rtl,
+                          softWrap: true,
+                          maxLines: null,
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                      ],
 
-                    if (editor.textStyle.showArabic && 
-                        editor.content.arabicText.isNotEmpty)
-                      const SizedBox(height: 20),
-
-                    // Transliteration
-                    if (editor.textStyle.showTransliteration &&
-                        editor.content.transliterationText.isNotEmpty) ...[
-                      Text(
-                        editor.content.transliterationText,
-                        style: TextStyle(
-                          fontSize: editor.textStyle.transliterationFontSize,
-                          color: editor.textStyle.secondaryTextColor,
-                          fontStyle: FontStyle.italic,
+                      // Transliteration
+                      if (editor.textStyle.showTransliteration &&
+                          editor.content.transliterationText.isNotEmpty) ...[
+                        Text(
+                          editor.content.transliterationText,
+                          style: TextStyle(
+                            fontSize: editor.textStyle.transliterationFontSize,
+                            color: editor.textStyle.secondaryTextColor,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          textAlign: editor.textStyle.textAlignment,
+                          softWrap: true,
                         ),
-                        textAlign: editor.textStyle.textAlignment,
-                      ),
-                      const SizedBox(height: 16),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Translation
+                      if (editor.textStyle.showTranslation &&
+                          editor.content.translationText.isNotEmpty) ...[
+                        Text(
+                          editor.content.translationText,
+                          style: TextStyle(
+                            fontSize: editor.textStyle.translationFontSize,
+                            fontStyle: editor.textStyle.translationItalic
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                            color: editor.textStyle.secondaryTextColor,
+                            height: 1.4,
+                          ),
+                          textAlign: editor.textStyle.textAlignment,
+                          textDirection: TextDirection.ltr,
+                          softWrap: true,
+                          maxLines: null,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // Reference
+                      if (editor.textStyle.showReference &&
+                          editor.content.referenceText.isNotEmpty) ...[
+                        Text(
+                          '— ${editor.content.referenceText}',
+                          style: TextStyle(
+                            fontSize: editor.textStyle.referenceFontSize,
+                            color: editor.textStyle.secondaryTextColor
+                                .withAlpha(204),
+                          ),
+                          textAlign: editor.textStyle.textAlignment,
+                          softWrap: true,
+                        ),
+                      ],
                     ],
-
-                    // Translation
-                    if (editor.textStyle.showTranslation &&
-                        editor.content.translationText.isNotEmpty)
-                      Text(
-                        editor.content.translationText,
-                        style: TextStyle(
-                          fontSize: editor.textStyle.translationFontSize,
-                          fontStyle: editor.textStyle.translationItalic
-                              ? FontStyle.italic
-                              : FontStyle.normal,
-                          color: editor.textStyle.secondaryTextColor,
-                          height: 1.5,
-                        ),
-                        textAlign: editor.textStyle.textAlignment,
-                      ),
-
-                    // Reference
-                    if (editor.textStyle.showReference &&
-                        editor.content.referenceText.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      Text(
-                        '— ${editor.content.referenceText}',
-                        style: TextStyle(
-                          fontSize: editor.textStyle.referenceFontSize,
-                          color: editor.textStyle.secondaryTextColor
-                              .withOpacity(0.8),
-                        ),
-                        textAlign: editor.textStyle.textAlignment,
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ),
 
@@ -145,7 +155,7 @@ class PostPreviewWidget extends StatelessWidget {
                     editor.watermarkText,
                     style: TextStyle(
                       fontSize: 10,
-                      color: editor.textStyle.textColor.withOpacity(0.4),
+                      color: editor.textStyle.textColor.withAlpha(102),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -199,19 +209,19 @@ class PostPreviewWidget extends StatelessWidget {
         Container(
           width: 30,
           height: 1,
-          color: color.withOpacity(0.3),
+          color: color.withAlpha(77),
         ),
         const SizedBox(width: 8),
         Icon(
           Icons.auto_awesome,
           size: 12,
-          color: color.withOpacity(0.5),
+          color: color.withAlpha(128),
         ),
         const SizedBox(width: 8),
         Container(
           width: 30,
           height: 1,
-          color: color.withOpacity(0.3),
+          color: color.withAlpha(77),
         ),
       ],
     );

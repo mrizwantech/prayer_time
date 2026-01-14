@@ -66,7 +66,6 @@ class AppThemeSettings extends ChangeNotifier {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
-    dialogBackgroundColor: darkSurface,
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: darkSurface,
     ),
@@ -104,7 +103,7 @@ class AppThemeSettings extends ChangeNotifier {
       titleSmall: TextStyle(color: darkSubtitle),
     ),
     iconTheme: const IconThemeData(color: accentColor),
-    useMaterial3: true,
+    useMaterial3: true, dialogTheme: DialogThemeData(backgroundColor: darkSurface),
   );
   
   // Get light theme
@@ -130,7 +129,6 @@ class AppThemeSettings extends ChangeNotifier {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
-    dialogBackgroundColor: lightSurface,
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: lightSurface,
     ),
@@ -168,7 +166,7 @@ class AppThemeSettings extends ChangeNotifier {
       titleSmall: TextStyle(color: lightSubtitle),
     ),
     iconTheme: const IconThemeData(color: accentColor),
-    useMaterial3: true,
+    useMaterial3: true, dialogTheme: DialogThemeData(backgroundColor: lightSurface),
   );
   
   Future<void> initialize() async {
