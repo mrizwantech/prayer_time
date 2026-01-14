@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "643833017336",
+    "project_id": "azanify-da213",
+    "storage_bucket": "azanify-da213.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:643833017336:android:d28750f9fa066f8f7f9c0d",
+        "android_client_info": {
+          "package_name": "com.mrizwantech.azanify"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBq3F0IR8jqVL3Vya_VMWexbYN3X0GewAc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      },
+      "admob_app_id": "ca-app-pub-5118580699569063~1126072263"
+    }
+  ],
+  "configuration_version": "1"
+}

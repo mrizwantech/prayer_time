@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'screens/home_screen.dart';
 import 'screens/qibla_screen.dart';
 import 'screens/settings_screen.dart';
@@ -24,6 +25,7 @@ import 'core/prayer_font_settings.dart';
 import 'core/prayer_theme_provider.dart';
 import 'core/ramadan_reminder_settings.dart';
 import 'core/quran_provider.dart';
+import 'core/analytics_service.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
 // Global navigator key for navigation from anywhere
@@ -32,6 +34,16 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
+
+  // Initialize Firebase
+  try {
+    await Firebase.initializeApp();
+    debugPrint('🔥 Firebase initialized successfully');
+    // Log app open
+    AnalyticsService().logAppOpen();
+  } catch (e) {
+    debugPrint('❌ Firebase initialization error: $e');
+  }
 
   // Initialize timezone database for notifications
   tz.initializeTimeZones();
