@@ -6,7 +6,7 @@ import '../core/prayer_time_service.dart';
 import '../presentation/widgets/app_header.dart';
 
 class NotificationSettingsScreen extends StatefulWidget {
-  const NotificationSettingsScreen({Key? key}) : super(key: key);
+  const NotificationSettingsScreen({super.key});
 
   @override
   State<NotificationSettingsScreen> createState() => _NotificationSettingsScreenState();
@@ -256,6 +256,71 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
 
             SizedBox(height: 24),
             
+            // Debug Info Card
+            Card(
+              color: Colors.grey.shade100,
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.bug_report, color: Colors.grey.shade700),
+                        SizedBox(width: 8),
+                        Text(
+                          'Debug Info',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        Spacer(),
+                        TextButton(
+                          onPressed: () async {
+                            final service = AdhanNotificationService();
+                            final pending = await service.getPendingNotifications();
+                            if (mounted) {
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: Text('Pending Notifications (${pending.length})'),
+                                  content: SingleChildScrollView(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: pending.isEmpty 
+                                        ? [Text('No pending notifications scheduled')]
+                                        : pending.map((n) => Padding(
+                                            padding: EdgeInsets.only(bottom: 8),
+                                            child: Text('ID ${n.id}: ${n.title}\n${n.payload ?? ""}', 
+                                              style: TextStyle(fontSize: 12)),
+                                          )).toList(),
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: Text('Close'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                          },
+                          child: Text('View Pending'),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      'Tap "View Pending" to see scheduled notifications.\nUse test buttons below to verify alarms work.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            SizedBox(height: 16),
+            
             // Test Notification Button
             Card(
               color: Colors.blue.shade50,
@@ -325,6 +390,54 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
                       label: Text('Test Scheduled (10s)'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final service = AdhanNotificationService();
+                        final testTime = DateTime.now().add(Duration(seconds: 15));
+                        await service.schedulePrayerNotification(
+                          id: 997,
+                          prayerName: 'Isha',
+                          prayerTime: testTime,
+                          nextPrayerTime: testTime.add(Duration(hours: 8)),
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('🌙 Isha test alarm in 15 seconds. Watch for adhan!'),
+                              duration: Duration(seconds: 5),
+                            ),
+                          );
+                        }
+                      },
+                      icon: Icon(Icons.nightlight_round),
+                      label: Text('Test ISHA Alarm (15s)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigo,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final service = AdhanNotificationService();
+                        await service.scheduleAllPrayersForToday();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('🔄 Forced reschedule of next prayer alarm!'),
+                              duration: Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                      },
+                      icon: Icon(Icons.refresh),
+                      label: Text('Force Reschedule Now'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
                       ),
                     ),

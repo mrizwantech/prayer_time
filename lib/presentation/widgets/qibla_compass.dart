@@ -6,7 +6,7 @@ import 'dart:async';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class QiblaCompass extends StatefulWidget {
-  const QiblaCompass({Key? key}) : super(key: key);
+  const QiblaCompass({super.key});
 
   @override
   State<QiblaCompass> createState() => _QiblaCompassState();

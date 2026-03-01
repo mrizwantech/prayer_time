@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../core/prayer_time_service.dart';
 
 class QiblaScreen extends StatelessWidget {
-  const QiblaScreen({Key? key}) : super(key: key);
+  const QiblaScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -218,12 +218,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _resumeQuran() {
-    if (_lastReadSurah == null) return;
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => QuranSurahScreen(summary: _lastReadSurah!)))
-        .then((_) => _loadLastReadQuran());
-  }
+
 
   Future<void> _onSupportPressed() async {
     final confirm = await showDialog<bool>(
@@ -369,9 +364,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
         break;
       case 'maghrib':
-        // Maghrib window lasts 90 minutes after Maghrib
-        if (service.maghrib != null) {
-          end = service.maghrib!.add(const Duration(minutes: 90));
+        // Maghrib prayer window ends when Isha begins
+        if (service.isha != null) {
+          end = service.isha!;
         }
         break;
       case 'isha':
@@ -459,79 +454,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   showSupport: true,
                   onSupport: _onSupportPressed,
                 ),
-                if (_lastReadSurah != null && _lastReadAyah != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white.withOpacity(0.18)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.15),
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 46,
-                            height: 46,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [Color(0xFF2DD4BF), Color(0xFF14B8A6)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                            ),
-                            child: const Icon(Icons.bookmark_added, color: Colors.white),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Continue Quran',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.92),
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${_lastReadSurah!.number}. ${_lastReadSurah!.nameEnglish}',
-                                  style: TextStyle(color: Colors.white.withOpacity(0.9)),
-                                ),
-                                Text(
-                                  'Start at ayah $_lastReadAyah',
-                                  style: TextStyle(color: Colors.white.withOpacity(0.75), fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          ElevatedButton(
-                            onPressed: _resumeQuran,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.tealAccent.shade400,
-                              foregroundColor: Colors.black87,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 0,
-                            ),
-                            child: const Text('Resume'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
+               
                 if (isRamadan && !_bannerDismissed)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -601,6 +524,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ),
 
+                // Date row with Gregorian and Islamic date
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: _dateRow(),
+                ),
+
+                // Current time
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: _currentTimeDisplay(),
+                ),
+
+                // Sun/Moon info row
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: _sunMoonRow(prayerService),
+                ),
+
+                // Next prayer card
                 if (!isRamadan && currentNext != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -627,12 +569,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _currentNextCard(Map<String, dynamic> data) {
-    final currentName = data['currentName'] as String;
-    final currentEndsAt = data['currentEndsAt'] as DateTime;
     final nextName = data['nextName'] as String;
     final nextTime = data['nextTime'] as DateTime;
 
-    final currentRemaining = currentEndsAt.difference(DateTime.now());
     final nextRemaining = nextTime.difference(DateTime.now());
 
     return Container(
@@ -642,55 +581,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withOpacity(0.18)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Time left in $currentName',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _formatDuration(currentRemaining),
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ],
+              Text(
+                'Next: $nextName',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'Next: $nextName',
-                    style: TextStyle(color: Colors.white.withOpacity(0.85), fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _formatDuration(nextRemaining),
-                    style: TextStyle(color: Colors.amber.shade100, fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ],
+              const SizedBox(height: 4),
+              Text(
+                DateFormat('hh:mm a').format(nextTime),
+                style: TextStyle(color: Colors.white.withOpacity(0.85)),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                DateFormat('hh:mm a').format(currentEndsAt),
-                style: TextStyle(color: Colors.white.withOpacity(0.85)),
-              ),
-              Text(
-                DateFormat('hh:mm a').format(nextTime),
-                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
-              ),
-            ],
+          Text(
+            _formatDuration(nextRemaining),
+            style: TextStyle(color: Colors.amber.shade100, fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -767,6 +677,176 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _sunMoonRow(PrayerTimeService prayerService) {
+    final hijriDate = HijriDate.now();
+    final moonPhase = hijriDate.getMoonPhase();
+    final moonPhaseName = hijriDate.getMoonPhaseName();
+    final moonIllumination = (moonPhase.illumination * 100).toStringAsFixed(0);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.18)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          // Moon phase
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _getMoonIcon(moonPhaseName),
+                color: Colors.amber.shade200,
+                size: 18,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '$moonIllumination%',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.8),
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          Container(
+            width: 1,
+            height: 16,
+            color: Colors.white.withOpacity(0.3),
+          ),
+          // Sunrise
+          if (prayerService.sunrise != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.wb_sunny_outlined,
+                  color: Colors.orange.withOpacity(0.9),
+                  size: 16,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  DateFormat('h:mm a').format(prayerService.sunrise!),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.85),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          Container(
+            width: 1,
+            height: 16,
+            color: Colors.white.withOpacity(0.3),
+          ),
+          // Sunset
+          if (prayerService.sunset != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.wb_twilight,
+                  color: Colors.deepOrange.withOpacity(0.9),
+                  size: 16,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  DateFormat('h:mm a').format(prayerService.sunset!),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.85),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getMoonIcon(String phaseName) {
+    switch (phaseName.toLowerCase()) {
+      case 'new moon':
+        return Icons.brightness_3;
+      case 'waxing crescent':
+        return Icons.nightlight_round;
+      case 'first quarter':
+        return Icons.nightlight;
+      case 'waxing gibbous':
+        return Icons.circle_outlined;
+      case 'full moon':
+        return Icons.circle;
+      case 'waning gibbous':
+        return Icons.circle_outlined;
+      case 'last quarter':
+        return Icons.nightlight;
+      case 'waning crescent':
+        return Icons.nightlight_round;
+      default:
+        return Icons.nightlight_round;
+    }
+  }
+
+  Widget _dateRow() {
+    final now = DateTime.now();
+    final gregorianDate = DateFormat('EEEE, MMMM d, yyyy').format(now);
+    final hijriDate = HijriDate.now();
+    final hijriDateStr = hijriDate.toFormat('dd MMMM yyyy');
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Flexible(
+          child: Text(
+            gregorianDate,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.9),
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          hijriDateStr,
+          style: TextStyle(
+            color: Colors.amber.shade200,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _currentTimeDisplay() {
+    final now = DateTime.now();
+    final timeFormat = DateFormat('hh:mm a').format(now);
+
+    return Center(
+      child: Text(
+        timeFormat,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 48,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 2,
+          shadows: [
+            Shadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
       ),
     );
   }

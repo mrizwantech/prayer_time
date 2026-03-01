@@ -116,8 +116,9 @@ class AdhanSoundService {
   }
 
   // Keys for SharedPreferences
+  // NOTE: SharedPreferences adds "flutter." prefix automatically, so native reads "flutter.adhan_volume"
   static const String _selectedAdhanKey = 'selected_adhan';
-  static const String _adhanVolumeKey = 'flutter.adhan_volume';
+  static const String _adhanVolumeKey = 'adhan_volume';
   static const String _fajrSoundKey = 'fajr_sound_enabled';
   static const String _dhuhrSoundKey = 'dhuhr_sound_enabled';
   static const String _asrSoundKey = 'asr_sound_enabled';
@@ -139,9 +140,8 @@ class AdhanSoundService {
   Future<void> setAdhanVolume(double volume) async {
     final prefs = await SharedPreferences.getInstance();
     final clamped = volume.clamp(0.0, 1.0);
+    // This saves as "flutter.adhan_volume" which native reads correctly
     await prefs.setDouble(_adhanVolumeKey, clamped);
-    // Also write legacy key for backward compatibility
-    await prefs.setDouble('adhan_volume', clamped);
     debugPrint('Adhan volume set to: ${(volume * 100).toInt()}%');
   }
 

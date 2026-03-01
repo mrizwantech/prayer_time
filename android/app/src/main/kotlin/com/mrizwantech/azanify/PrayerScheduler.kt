@@ -45,10 +45,19 @@ object PrayerScheduler {
             "Isha" to todayTimes.isha
         )
 
+        Log.d("PrayerScheduler", "Today's prayers:")
+        todayPrayers.forEach { (name, time) ->
+            val isPast = time.time <= now
+            Log.d("PrayerScheduler", "  $name: ${Date(time.time)} ${if (isPast) "(PASSED)" else "(UPCOMING)"}")
+        }
+
         todayPrayers.firstOrNull { it.second.time > now }?.let {
+            Log.d("PrayerScheduler", "✅ Next prayer to schedule: ${it.first} at ${Date(it.second.time)}")
             scheduleAlarm(context, it.first, it.second.time)
             return
         }
+        
+        Log.d("PrayerScheduler", "⚠️ All today's prayers passed, scheduling tomorrow's Fajr")
 
         // All passed -> schedule tomorrow Fajr
         val tomorrow = DateComponents.from(Date(System.currentTimeMillis() + 24 * 60 * 60 * 1000))
@@ -69,9 +78,19 @@ object PrayerScheduler {
             return
         }
 
+        // Fajr always uses 'fajr' adhan, other prayers use user's selected adhan
+        val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val soundFile = if (prayerName.lowercase() == "fajr") {
+            "fajr"
+        } else {
+            prefs.getString("flutter.selected_adhan", "Rabeh Ibn Darah Al Jazairi - Adan Al Jazaer") 
+                ?: "Rabeh Ibn Darah Al Jazairi - Adan Al Jazaer"
+        }
+        Log.d("PrayerScheduler", "Sound file for $prayerName: $soundFile")
+
         val intent = Intent(context, AdhanAlarmReceiver::class.java).apply {
             putExtra("prayerName", prayerName)
-            putExtra("soundFile", "fajr") // default; service can override if needed
+            putExtra("soundFile", soundFile)
         }
 
         // Single deterministic requestCode

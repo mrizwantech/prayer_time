@@ -220,7 +220,7 @@ class _CalculationMethodScreenState extends State<CalculationMethodScreen> {
           ),
         ),
         bottomNavigationBar: BottomNavigationBar(
-          currentIndex: 4,
+          currentIndex: 6, // keep Settings highlighted
           onTap: (idx) {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => MainNavigation(initialIndex: idx)),
@@ -232,9 +232,11 @@ class _CalculationMethodScreenState extends State<CalculationMethodScreen> {
           backgroundColor: Theme.of(context).colorScheme.surface,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Quran'),
             BottomNavigationBarItem(icon: Icon(Icons.radio_button_checked), label: 'Tasbeeh'),
             BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
-            BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'RakatTracker'),
+            BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'Rakat'),
+            BottomNavigationBarItem(icon: Icon(Icons.brush), label: 'Posts'),
             BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
           ],
         ),

@@ -6,6 +6,7 @@ import 'package:hijri_date/hijri_date.dart';
 import '../core/prayer_time_service.dart';
 import '../core/time_format_settings.dart';
 import '../presentation/widgets/app_header.dart';
+import '../main.dart';
 
 class MonthlyCalendarScreen extends StatefulWidget {
   const MonthlyCalendarScreen({super.key});
@@ -349,26 +350,11 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
+        currentIndex: 6, // Settings tab for calendar
         onTap: (idx) {
-          // navigate via root bottom nav indices
-          switch (idx) {
-            case 0:
-              Navigator.of(context).popUntil((route) => route.isFirst);
-              break;
-            case 1:
-              Navigator.of(context).pushNamed('/tasbeeh');
-              break;
-            case 2:
-              Navigator.of(context).pushNamed('/qibla');
-              break;
-            case 3:
-              Navigator.of(context).pushNamed('/tracker');
-              break;
-            case 4:
-              Navigator.of(context).pushNamed('/settings');
-              break;
-          }
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => MainNavigation(initialIndex: idx)),
+          );
         },
         selectedItemColor: theme.colorScheme.primary,
         unselectedItemColor: theme.colorScheme.onSurface.withOpacity(0.5),
@@ -376,9 +362,11 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
         backgroundColor: theme.colorScheme.surface,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Quran'),
           BottomNavigationBarItem(icon: Icon(Icons.radio_button_checked), label: 'Tasbeeh'),
           BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
-          BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'RakatTracker'),
+          BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'Rakat'),
+          BottomNavigationBarItem(icon: Icon(Icons.brush), label: 'Posts'),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
