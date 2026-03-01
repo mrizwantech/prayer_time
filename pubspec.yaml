@@ -105,6 +105,8 @@ flutter_launcher_icons:
   image_path: "assets/images/logoprayer.png"
   min_sdk_android: 21
   remove_alpha_ios: true
+  adaptive_icon_foreground: "assets/images/logoprayer.png"
+  adaptive_icon_background: "#1a1d2e"
 
 # Flutter native splash configuration
 flutter_native_splash:
@@ -122,6 +124,8 @@ flutter_native_splash:
   android: true
   ios: true
   web: false
+
+
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

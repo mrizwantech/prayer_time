@@ -185,12 +185,12 @@ class AppHeader extends StatelessWidget {
                     onPressed: onSupport,
                     padding: const EdgeInsets.all(8),
                     constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                    tooltip: 'Support',
+                    tooltip: 'Donate',
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Support',
+                  'Donate',
                   style: TextStyle(
                     fontSize: 11,
                     color: textColor.withOpacity(0.8),

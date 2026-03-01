@@ -13,6 +13,7 @@ import 'screens/adhan_player_screen.dart';
 import 'screens/tasbeeh_screen.dart';
 import 'screens/quran_screen.dart';
 import 'screens/calculation_method_screen.dart';
+import 'screens/splash_screen.dart';
 import 'features/prayer_tracker/rakah_counter_screen.dart';
 import 'features/islamic_posts/islamic_post_creator_screen.dart';
 import 'package:provider/provider.dart';
@@ -219,46 +220,68 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
   String _statusMessage = 'Initializing...';
   CalculationMethodSettings? _settings;
   Timer? _adhanWaitTimer;
+  late DateTime _splashStartTime;
+  bool _initStarted = false;
 
   @override
   void initState() {
     super.initState();
-    _initialize();
+    _splashStartTime = DateTime.now();
+
+    // ALWAYS show splash first, then decide what to show next
+    // Wait for the first frame to paint so the splash is visible
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+
+      if (!_initStarted && mounted) {
+        _initStarted = true;
+        _afterSplashVisible();
+      }
+    });
   }
 
-  Future<void> _initialize() async {
-    // If first time setup, show calculation method screen first
+  /// Called after the splash screen has been rendered on screen
+  Future<void> _afterSplashVisible() async {
     if (widget.isFirstTimeSetup) {
+      // Show splash for at least 4 seconds before showing setup
+      final elapsed = DateTime.now().difference(_splashStartTime);
+      final minSplash = const Duration(seconds: 4);
+      if (elapsed < minSplash) {
+        await Future.delayed(minSplash - elapsed);
+      }
+      if (!mounted) return;
+
       setState(() {
         _showCalculationMethod = true;
         _isLoading = false;
       });
 
       // Listen for when method is selected
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _settings = Provider.of<CalculationMethodSettings>(
-          context,
-          listen: false,
-        );
-        _settings?.addListener(_onMethodSelected);
-      });
-      return;
+      _settings = Provider.of<CalculationMethodSettings>(
+        context,
+        listen: false,
+      );
+      _settings?.addListener(_onMethodSelected);
+    } else {
+      // Normal launch - load everything while splash is visible
+      await _loadEverything();
     }
-
-    // Otherwise, proceed with initialization
-    await _loadEverything();
   }
 
   void _onMethodSelected() {
     if (_settings != null &&
         _settings!.hasSelectedMethod &&
         _showCalculationMethod) {
+      // Reset splash timer for the loading phase
+      _splashStartTime = DateTime.now();
       setState(() {
         _showCalculationMethod = false;
         _isLoading = true;
         _statusMessage = 'Getting permissions...';
       });
-      _loadEverything();
+      // Wait one frame so splash renders before heavy loading starts
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadEverything();
+      });
     }
   }
 
@@ -331,9 +354,22 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
 
   void _goToMain() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const MainNavigation()),
-    );
+
+    // Ensure splash screen shows for at least 3 seconds
+    final elapsed = DateTime.now().difference(_splashStartTime);
+    final minDuration = const Duration(seconds: 4);
+    if (elapsed < minDuration) {
+      Future.delayed(minDuration - elapsed, () {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const MainNavigation()),
+        );
+      });
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const MainNavigation()),
+      );
+    }
   }
 
   @override
@@ -345,62 +381,15 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final accentColor = theme.colorScheme.primary;
-
     // Show calculation method screen if needed
     if (_showCalculationMethod) {
       return CalculationMethodScreen(isFirstTime: true);
     }
 
     // Show loading screen
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // App logo/icon
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: accentColor,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                Icons.mosque,
-                size: 60,
-                color: theme.brightness == Brightness.dark
-                    ? Colors.black
-                    : Colors.white,
-              ),
-            ),
-            const SizedBox(height: 30),
-            // App name
-            Text(
-              'Azanify',
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 40),
-            // Loading indicator
-            CircularProgressIndicator(color: accentColor),
-            const SizedBox(height: 20),
-            // Status message
-            Text(
-              _statusMessage,
-              style: TextStyle(
-                fontSize: 16,
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return SplashScreen(
+      statusMessage: _statusMessage,
+      isLoading: _isLoading,
     );
   }
 }

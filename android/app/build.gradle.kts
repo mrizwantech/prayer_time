@@ -64,6 +64,8 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // Adhan prayer times library for native calculation
     implementation("com.batoulapps.adhan:adhan:1.2.1")
+    // AndroidX Core for WindowCompat
+    implementation("androidx.core:core-ktx:1.12.0")
 }
 
 flutter {
