@@ -15,7 +15,6 @@ import 'screens/quran_screen.dart';
 import 'screens/calculation_method_screen.dart';
 import 'screens/splash_screen.dart';
 import 'features/prayer_tracker/rakah_counter_screen.dart';
-import 'features/islamic_posts/islamic_post_creator_screen.dart';
 import 'package:provider/provider.dart';
 import 'core/time_format_settings.dart';
 import 'core/calculation_method_settings.dart';
@@ -41,11 +40,11 @@ void main() async {
   try {
     await Firebase.initializeApp();
     debugPrint('🔥 Firebase initialized successfully');
-    
+
     // Initialize Crashlytics
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
     debugPrint('🔥 Crashlytics initialized');
-    
+
     // Log app open
     AnalyticsService().logAppOpen();
   } catch (e) {
@@ -311,7 +310,7 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
         context,
         listen: false,
       );
-      
+
       // Also add timeout for prayer time initialization
       await prayerTimeService.initialize()
           .timeout(const Duration(seconds: 30), onTimeout: () {
@@ -464,7 +463,6 @@ class _MainNavigationState extends State<MainNavigation> {
     TasbeehScreen(),
     QiblaScreen(),
     RakahCounterScreen(),
-    IslamicPostCreatorScreen(),
     SettingsScreen(),
   ];
 
@@ -765,10 +763,6 @@ class _MainNavigationState extends State<MainNavigation> {
             BottomNavigationBarItem(
               icon: Icon(Icons.track_changes),
               label: 'Rakat',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.brush),
-              label: 'Posts',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.settings),

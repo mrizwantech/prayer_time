@@ -39,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _startCountdownTimer();
     _loadRewardedAd();
   }
-  
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -53,16 +53,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _startCountdownTimer();
     }
   }
-  
+
   bool get _isAppInForeground => _lifecycleState == AppLifecycleState.resumed;
-  
+
   void _startCountdownTimer() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
   }
-  
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -454,7 +454,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   showSupport: true,
                   onSupport: _onSupportPressed,
                 ),
-               
+
                 if (isRamadan && !_bannerDismissed)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -851,4 +851,3 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 }
-
