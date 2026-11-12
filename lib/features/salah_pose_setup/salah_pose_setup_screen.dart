@@ -13,7 +13,14 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/prayer_time_service.dart';
 
 class SalahPoseSetupScreen extends StatefulWidget {
-  const SalahPoseSetupScreen({super.key});
+  const SalahPoseSetupScreen({
+    super.key,
+    this.initialPrayer,
+    this.initialRakats,
+  });
+
+  final String? initialPrayer;
+  final int? initialRakats;
 
   @override
   State<SalahPoseSetupScreen> createState() => _SalahPoseSetupScreenState();
@@ -94,9 +101,20 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
     super.didChangeDependencies();
     if (_initializedPrayerSelection) return;
     _initializedPrayerSelection = true;
-    final prayerTimeService = context.read<PrayerTimeService>();
-    final currentPrayer = prayerTimeService.getCurrentPrayerName();
-    if (['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'].contains(currentPrayer)) {
+    final currentPrayer =
+        widget.initialPrayer ??
+        context.read<PrayerTimeService>().getCurrentPrayerName();
+    if ([
+          'Fajr',
+          'Dhuhr',
+          'Asr',
+          'Maghrib',
+          'Isha',
+          'Witr',
+          'Taraweeh',
+          'Sunnah / Nafl',
+        ].contains(currentPrayer) ||
+        widget.initialPrayer != null) {
       _selectedPrayer = currentPrayer;
     }
   }
@@ -402,11 +420,19 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
         wristRaisedNearHead(rightWrist, rightElbow);
   }
 
-  int get _rakatCount => switch (_selectedPrayer) {
-    'Fajr' => 2,
-    'Maghrib' => 3,
-    _ => 4,
-  };
+  int get _rakatCount {
+    if (widget.initialRakats != null &&
+        _selectedPrayer == widget.initialPrayer) {
+      return widget.initialRakats!;
+    }
+    return switch (_selectedPrayer) {
+      'Fajr' => 2,
+      'Maghrib' || 'Witr' => 3,
+      'Taraweeh' => 20,
+      'Sunnah / Nafl' => 2,
+      _ => 4,
+    };
+  }
 
   List<_PrayerStage> get _prayerStages {
     final stages = <_PrayerStage>[];
@@ -766,7 +792,7 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
     if (position == _PrayerPosition.unknown) {
       if (_candidatePosition == nextStage.position) {
         _stageMissingFrames++;
-        if (_stageMissingFrames > 5) {
+        if (_stageMissingFrames > 8) {
           _candidatePosition = null;
           _stageHoldFrames = 0;
           _stageMissingFrames = 0;
@@ -775,6 +801,7 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
       return;
     }
     if (position != nextStage.position) {
+   
       _candidatePosition = null;
       _stageHoldFrames = 0;
       _stageMissingFrames = 0;
@@ -1195,14 +1222,35 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
           color: Colors.white,
           fontWeight: FontWeight.w600,
         ),
-        items: const ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha']
-            .map(
-              (prayer) => DropdownMenuItem(
-                value: prayer,
-                child: Text('$prayer Prayer'),
-              ),
-            )
-            .toList(),
+        items:
+            <String>[
+                  'Fajr',
+                  'Dhuhr',
+                  'Asr',
+                  'Maghrib',
+                  'Isha',
+                  'Witr',
+                  'Taraweeh',
+                  'Sunnah / Nafl',
+                  if (!{
+                    'Fajr',
+                    'Dhuhr',
+                    'Asr',
+                    'Maghrib',
+                    'Isha',
+                    'Witr',
+                    'Taraweeh',
+                    'Sunnah / Nafl',
+                  }.contains(_selectedPrayer))
+                    _selectedPrayer,
+                ]
+                .map(
+                  (prayer) => DropdownMenuItem(
+                    value: prayer,
+                    child: Text('$prayer Prayer'),
+                  ),
+                )
+                .toList(),
         onChanged: (prayer) {
           if (prayer != null) {
             setState(() {

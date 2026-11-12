@@ -455,24 +455,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   onSupport: _onSupportPressed,
                 ),
 
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 42,
-                    child: OutlinedButton.icon(
-                      onPressed: () => Navigator.of(context).pushNamed('/salah-framing'),
-                      icon: const Icon(Icons.center_focus_strong_outlined, size: 18),
-                      label: const Text('Salah motion tracker'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withOpacity(0.28)),
-                        alignment: Alignment.centerLeft,
-                      ),
-                    ),
-                  ),
-                ),
-
                 if (isRamadan && !_bannerDismissed)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
