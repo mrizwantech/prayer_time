@@ -15,6 +15,7 @@ import 'screens/quran_screen.dart';
 import 'screens/calculation_method_screen.dart';
 import 'screens/splash_screen.dart';
 import 'features/prayer_tracker/rakah_counter_screen.dart';
+import 'features/salah_pose_setup/salah_pose_setup_screen.dart';
 import 'features/islamic_posts/islamic_post_creator_screen.dart';
 import 'package:provider/provider.dart';
 import 'core/time_format_settings.dart';
@@ -41,11 +42,11 @@ void main() async {
   try {
     await Firebase.initializeApp();
     debugPrint('🔥 Firebase initialized successfully');
-    
+
     // Initialize Crashlytics
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
     debugPrint('🔥 Crashlytics initialized');
-    
+
     // Log app open
     AnalyticsService().logAppOpen();
   } catch (e) {
@@ -199,6 +200,7 @@ class _MyAppState extends State<MyApp> {
           return AdhanPlayerScreen(prayerName: args['prayerName']);
         },
         '/settings': (context) => SettingsScreen(),
+        '/salah-framing': (context) => const SalahPoseSetupScreen(),
       },
     );
   }
@@ -311,7 +313,7 @@ class _AppStartupScreenState extends State<AppStartupScreen> {
         context,
         listen: false,
       );
-      
+
       // Also add timeout for prayer time initialization
       await prayerTimeService.initialize()
           .timeout(const Duration(seconds: 30), onTimeout: () {

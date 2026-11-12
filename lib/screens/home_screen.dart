@@ -39,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _startCountdownTimer();
     _loadRewardedAd();
   }
-  
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -53,16 +53,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _startCountdownTimer();
     }
   }
-  
+
   bool get _isAppInForeground => _lifecycleState == AppLifecycleState.resumed;
-  
+
   void _startCountdownTimer() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
   }
-  
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -454,7 +454,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   showSupport: true,
                   onSupport: _onSupportPressed,
                 ),
-               
+
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 42,
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).pushNamed('/salah-framing'),
+                      icon: const Icon(Icons.center_focus_strong_outlined, size: 18),
+                      label: const Text('Salah motion tracker'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withOpacity(0.28)),
+                        alignment: Alignment.centerLeft,
+                      ),
+                    ),
+                  ),
+                ),
+
                 if (isRamadan && !_bannerDismissed)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -851,4 +869,3 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 }
-

@@ -4,6 +4,8 @@
 	<dict>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
+		<key>NSCameraUsageDescription</key>
+		<string>The camera detects your body position during prayer. Frames stay on this device and are not saved.</string>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>This app needs your location to calculate prayer times accurately.</string>
 		<key>NSLocationAlwaysUsageDescription</key>
