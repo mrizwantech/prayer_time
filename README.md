@@ -2,6 +2,14 @@
 
 A new Flutter project.
 
+## iOS advertising setup
+
+The iOS app uses Google's sample AdMob app ID in `ios/Runner/Info.plist`
+and a test rewarded ad unit in `lib/screens/home_screen.dart`.
+Replace both with your iOS AdMob app and rewarded ad unit IDs before release.
+The app ID is required at startup; omitting it causes the Google Mobile Ads SDK
+to terminate the app.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

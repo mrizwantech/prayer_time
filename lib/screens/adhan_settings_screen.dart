@@ -139,7 +139,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
     return time.hour >= 12 ? 'PM' : 'AM';
   }
 
-  IconData _getPrayerIcon(String prayerName) {
+  FaIconData _getPrayerIcon(String prayerName) {
     switch (prayerName.toLowerCase()) {
       case 'fajr':
         return FontAwesomeIcons.cloudSun;
