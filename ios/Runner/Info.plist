@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Islamic Prayer Times</string>
+	<string>Azanify</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>islamic_prayer_times</string>
+	<string>Azanify</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -32,6 +32,8 @@
 	<string>The camera detects your body position during prayer. Frames stay on this device and are not saved.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>This app needs your location to calculate prayer times accurately.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Azanify rings an alarm with the adhan at each prayer time.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app needs your location to calculate prayer times accurately.</string>
 	<key>UIApplicationSceneManifest</key>

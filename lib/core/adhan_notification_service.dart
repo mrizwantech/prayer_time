@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -25,6 +27,35 @@ class AdhanNotificationService {
   bool get hasPendingAdhanLaunch => _pendingAdhanLaunch != null;
   
   static const platform = MethodChannel('com.mrizwantech.azanify/adhan_alarm');
+  static const _iosAlarmChannel = MethodChannel('com.mrizwantech.azanify/ios_alarm');
+
+  /// True when AlarmKit (iOS 26+) is available and the user allowed alarms.
+  Future<bool> _iosAlarmsAuthorized() async {
+    if (!Platform.isIOS) return false;
+    try {
+      return await _iosAlarmChannel.invokeMethod<bool>('isAuthorized') ?? false;
+    } catch (e) {
+      debugPrint('AlarmKit unavailable: $e');
+      return false;
+    }
+  }
+
+  /// Schedules a full-screen AlarmKit alarm. Returns false so callers can fall
+  /// back to a regular notification.
+  Future<bool> _scheduleIosAlarm(String prayerName, String title, DateTime at, String? sound) async {
+    try {
+      await _iosAlarmChannel.invokeMethod('schedule', {
+        'prayerName': prayerName,
+        'title': title,
+        'time': at.millisecondsSinceEpoch,
+        'sound': sound,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('⚠️ AlarmKit schedule failed for $prayerName: $e');
+      return false;
+    }
+  }
   
   static const String _channelId = 'adhan_channel_v2';
   static const String _channelName = 'Prayer Time Notifications';
@@ -151,7 +182,21 @@ class AdhanNotificationService {
       }
     }
     
-    // For iOS, permissions are requested during initialization
+    final iosImpl = _notifications.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+    if (iosImpl != null) {
+      final granted = await iosImpl.requestPermissions(alert: true, badge: true, sound: true);
+      debugPrint('iOS notification permission granted: $granted');
+      try {
+        if (await _iosAlarmChannel.invokeMethod<bool>('isAvailable') ?? false) {
+          final alarms = await _iosAlarmChannel.invokeMethod<bool>('requestAuthorization');
+          debugPrint('iOS AlarmKit permission granted: $alarms');
+        }
+      } catch (e) {
+        debugPrint('AlarmKit authorization error: $e');
+      }
+      return granted ?? false;
+    }
+
     return true;
   }
 
@@ -188,7 +233,7 @@ class AdhanNotificationService {
     try {
       // Schedule Android alarm. For test buttons (Test or specific prayer tests), schedule at the provided time.
       // For normal prayers during regular scheduling, rely on native single-next chaining for reliability.
-      if (shouldPlaySound) {
+      if (shouldPlaySound && Platform.isAndroid) {
         try {
           final selectedAdhan = await _soundService.getSelectedAdhan();
           // Use direct alarm scheduling for test prayers OR if this is an Isha test (id 997)
@@ -215,6 +260,15 @@ class AdhanNotificationService {
         }
       }
       
+      final iosSound = Platform.isAndroid ? null : await _darwinAdhanSound(prayerName);
+
+      if (iosSound != '' &&
+          await _iosAlarmsAuthorized() &&
+          await _scheduleIosAlarm(prayerName, 'Time for $prayerName Prayer', prayerTime, iosSound)) {
+        debugPrint('✅ AlarmKit alarm scheduled for $prayerName at $prayerTime');
+        return;
+      }
+
       // Fall back to Flutter notification only if native alarm fails or sound is disabled
       await _notifications.zonedSchedule(
         id,
@@ -258,11 +312,7 @@ class AdhanNotificationService {
             // Add tag to identify this is a prayer notification
             tag: 'prayer_$prayerName',
           ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-          ),
+          iOS: _darwinPrayerDetails(iosSound),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         payload: '$prayerName|${nextPrayerTime.millisecondsSinceEpoch}',
@@ -945,6 +995,12 @@ class AdhanNotificationService {
       await prefs.setDouble('longitude', lng);
       debugPrint('Saved coords to SharedPreferences for native scheduling: $lat, $lng');
 
+      // The native alarm scheduler only exists on Android.
+      if (!Platform.isAndroid) {
+        await _scheduleDarwinPrayerNotifications(lat, lng);
+        return;
+      }
+
       // Instead of scheduling all, ask native to schedule the single next alarm
       // Native uses stored prefs (lat/lng/method) to compute next prayer.
       try {
@@ -958,5 +1014,111 @@ class AdhanNotificationService {
     } catch (e) {
       debugPrint('Error scheduling all prayers: $e');
     }
+  }
+
+  /// Returns the bundled iOS notification sound (ios/Runner/*.caf, max 30s)
+  /// for the user's selected adhan. Null means the default system sound,
+  /// and an empty string means silent.
+  Future<String?> _darwinAdhanSound(String prayerName) async {
+    // No Fajr clip is bundled for iOS, so Fajr uses the default tone.
+    if (prayerName == 'Fajr') return null;
+    if (!await _soundService.getSoundEnabled(prayerName)) return '';
+    final adhan = (await _soundService.getSelectedAdhan()).toLowerCase();
+    if (adhan == 'silent') return '';
+    if (adhan.contains('rabeh')) return 'adhan_rabeh.caf';
+    if (adhan.contains('sharqawe')) return 'adhan_sharqawe.caf';
+    return null;
+  }
+
+  DarwinNotificationDetails _darwinPrayerDetails(String? sound) => DarwinNotificationDetails(
+        presentAlert: true,
+        presentBanner: true,
+        presentList: true,
+        presentBadge: true,
+        presentSound: sound != '',
+        sound: (sound == null || sound.isEmpty) ? null : sound,
+      );
+
+  static const int _darwinPrayerIdBase = 2000;
+  static const int _darwinScheduleDays = 7;
+  static const List<String> _darwinPrayerNames = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+
+  /// Schedules the upcoming week of prayer notifications. iOS caps pending
+  /// notifications at 64, so this stays at 35 to leave room for reminders.
+  Future<void> _scheduleDarwinPrayerNotifications(double lat, double lng) async {
+    final prefs = await SharedPreferences.getInstance();
+    final params = await _getCalculationParams();
+    final coordinates = Coordinates(lat, lng);
+    final now = DateTime.now();
+
+    for (var day = 0; day < _darwinScheduleDays; day++) {
+      for (var i = 0; i < _darwinPrayerNames.length; i++) {
+        await _notifications.cancel(_darwinPrayerIdBase + day * 10 + i);
+      }
+    }
+
+    final useAlarms = await _iosAlarmsAuthorized();
+    if (useAlarms) {
+      await _iosAlarmChannel.invokeMethod('cancelAll');
+    }
+
+    // One extra day so the last Isha has a following prayer for the snooze payload.
+    final upcoming = <({int day, int index, DateTime time})>[];
+    for (var day = 0; day <= _darwinScheduleDays; day++) {
+      final date = DateTime(now.year, now.month, now.day + day);
+      final times = PrayerTimes(coordinates, DateComponents.from(date), params);
+      final prayerTimes = [times.fajr, times.dhuhr, times.asr, times.maghrib, times.isha];
+      for (var i = 0; i < prayerTimes.length; i++) {
+        upcoming.add((day: day, index: i, time: prayerTimes[i].toLocal()));
+      }
+    }
+
+    var scheduledCount = 0;
+    var alarmCount = 0;
+    for (var n = 0; n < upcoming.length - 1; n++) {
+      final entry = upcoming[n];
+      if (entry.day >= _darwinScheduleDays) break;
+
+      final name = _darwinPrayerNames[entry.index];
+      // The Fajr row is hidden on iOS, so its saved toggles can't be changed there.
+      final userControlled = name != 'Fajr';
+      if (userControlled && !(prefs.getBool('prayer_enabled_$name') ?? true)) continue;
+
+      final days = prefs.getStringList('prayer_days_$name');
+      if (userControlled && days != null && days.length == 7 && days[entry.time.weekday % 7] != 'true') {
+        continue;
+      }
+
+      final offset = userControlled ? (prefs.getInt('prayer_offset_$name') ?? 0) : 0;
+      final notifyAt = entry.time.subtract(Duration(minutes: offset));
+      if (!notifyAt.isAfter(now)) continue;
+
+      final title = 'Time for $name Prayer';
+      final body = offset > 0
+          ? '$name prayer begins in $offset minutes'
+          : 'It\'s time to pray $name';
+      final sound = await _darwinAdhanSound(name);
+
+      // Fajr has no adhan clip on iOS, so it stays a regular notification.
+      if (useAlarms && name != 'Fajr' && sound != '' &&
+          await _scheduleIosAlarm(name, offset > 0 ? body : title, notifyAt, sound)) {
+        alarmCount++;
+        continue;
+      }
+
+      await _notifications.zonedSchedule(
+        _darwinPrayerIdBase + entry.day * 10 + entry.index,
+        title,
+        body,
+        tz.TZDateTime.from(notifyAt, tz.local),
+        NotificationDetails(iOS: _darwinPrayerDetails(sound)),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        payload: '$name|${upcoming[n + 1].time.millisecondsSinceEpoch}',
+      );
+      scheduledCount++;
+    }
+
+    debugPrint('✅ Scheduled $alarmCount iOS alarms and $scheduledCount iOS prayer notifications');
+    await debugPrintPendingNotifications();
   }
 }

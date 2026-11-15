@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -541,7 +543,7 @@ class _MainNavigationState extends State<MainNavigation> {
                   ),
                   _buildPermissionItem(
                     Icons.alarm,
-                    'Exact Alarms',
+                    Platform.isIOS ? 'Alarms' : 'Exact Alarms',
                     'To notify you at the precise prayer time',
                   ),
                   SizedBox(height: 16),
@@ -563,13 +565,19 @@ class _MainNavigationState extends State<MainNavigation> {
                 ElevatedButton(
                   onPressed: () async {
                     Navigator.pop(context);
+                    // iOS only shows each permission prompt once, so after a
+                    // denial the user has to enable it in the Settings app.
+                    if (Platform.isIOS) {
+                      await Geolocator.openAppSettings();
+                      return;
+                    }
                     await _requestAllPermissions(); // Try again
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
                     foregroundColor: Colors.white,
                   ),
-                  child: Text('Grant Permissions'),
+                  child: Text(Platform.isIOS ? 'Open Settings' : 'Grant Permissions'),
                 ),
               ],
             ),

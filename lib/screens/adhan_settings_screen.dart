@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -69,6 +71,9 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
     for (var entry in prayerTimes.entries) {
       final prayerName = entry.key;
       final prayerTime = entry.value;
+
+      // Fajr's own adhan can't play on iOS, so its row is Android-only.
+      if (!Platform.isAndroid && prayerName == 'Fajr') continue;
 
       // Load enabled state
       final isEnabled =
