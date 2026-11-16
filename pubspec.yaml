@@ -149,6 +149,7 @@ flutter:
   assets:
     - assets/translations/
     - assets/sounds/
+    - assets/audio/coach/
     - assets/images/
 
   # An image asset can refer to one or more resolution-specific "variants", see

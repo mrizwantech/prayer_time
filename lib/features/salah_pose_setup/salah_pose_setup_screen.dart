@@ -6,11 +6,13 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/prayer_time_service.dart';
+import 'prayer_coach_audio.dart';
 
 class SalahPoseSetupScreen extends StatefulWidget {
   const SalahPoseSetupScreen({
@@ -34,6 +36,18 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
   static const _muted = Color(0xFFB7C8C0);
   static const _stableFramesRequired = 8;
   static const _raisedHandsFramesRequired = 4;
+  static const _standingOrBowingHold = Duration(milliseconds: 500);
+  static const _sujoodHold = Duration(milliseconds: 1000);
+  static const _sittingHold = Duration(milliseconds: 1000);
+  // Distances are fractions of the camera frame height.
+  static const _jalsaMinHeadRise = 0.08;
+  static const _sittingFromSujoodHeadRise = 0.10;
+  static const _uprightHeadTolerance = 0.08;
+  static const _mistakeHold = Duration(milliseconds: 1000);
+  static const _sittingTooLongHold = Duration(seconds: 5);
+  static const _mistakeRepeatInterval = Duration(seconds: 8);
+  static const _finalSittingGrace = Duration(seconds: 8);
+  static const _sujoodHeadAboveHipTolerance = 0.03;
 
   final PoseDetector _poseDetector = PoseDetector(
     options: PoseDetectorOptions(),
@@ -68,8 +82,8 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
   int _raisedHandsFrames = 0;
   int _currentStepIndex = 0;
   int _completedRakats = 0;
-  int _stageHoldFrames = 0;
   int _stageMissingFrames = 0;
+  int _stageMismatchFrames = 0;
   int _standingBaselineSamples = 0;
   double? _standingTiltBaseline;
   double? _standingDepthBaseline;
@@ -90,6 +104,65 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
   double _lastHeadFootGap = 1;
   double _lastHeadFootDistance = 1;
   _PrayerPosition? _candidatePosition;
+  DateTime? _candidateSince;
+  // Head height (0 = top of frame, 1 = bottom) seen in the current frame, or
+  // null when the head was not detected.
+  double? _frameHeadY;
+  double? _frameHipY;
+  // Lowest head position during the latest sujood and highest during jalsa,
+  // used to require a real rise/fall between the two prostrations.
+  double? _sujoodHeadY;
+  double? _jalsaHeadY;
+  // Head height while standing, used to tell when someone is upright again.
+  double? _standingHeadY;
+  final PrayerCoachAudio _coach = PrayerCoachAudio();
+  PrayerCue? _mistakeCue;
+  DateTime? _mistakeSince;
+  int _mistakeGlitchFrames = 0;
+  PrayerCue? _mistakeSpokenCue;
+  DateTime? _mistakeSpokenAt;
+  bool _sahwNeeded = false;
+  DateTime? _stageEnteredAt;
+  _CoachAlert? _coachAlert;
+  Timer? _coachAlertTimer;
+  // Per-frame tracker log in the app's Documents folder, so it can be pulled
+  // off a test device that isn't connected while praying.
+  File? _poseLogFile;
+  final StringBuffer _poseLogBuffer = StringBuffer();
+  DateTime _lastPoseLogFlush = DateTime.fromMillisecondsSinceEpoch(0);
+
+  Future<void> _openPoseLog() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      _poseLogFile = File('${dir.path}/salah_pose_log.txt');
+      _poseLog('===== session ${DateTime.now().toIso8601String()} =====');
+    } catch (e) {
+      debugPrint('[SalahPose] could not open log file: $e');
+    }
+  }
+
+  void _poseLog(String line) {
+    final now = DateTime.now();
+    _poseLogBuffer.writeln('${now.toIso8601String().substring(11, 23)} $line');
+    if (now.difference(_lastPoseLogFlush) >= const Duration(seconds: 1) ||
+        line.startsWith('>>>')) {
+      _flushPoseLog();
+      _lastPoseLogFlush = now;
+    }
+  }
+
+  void _flushPoseLog() {
+    final file = _poseLogFile;
+    if (file == null || _poseLogBuffer.isEmpty) return;
+    try {
+      file.writeAsStringSync(
+        _poseLogBuffer.toString(),
+        mode: FileMode.append,
+        flush: true,
+      );
+    } catch (_) {}
+    _poseLogBuffer.clear();
+  }
   _PrayerPosition _detectedPosition = _PrayerPosition.unknown;
   DateTime _lastProcessedFrame = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastPoseDiagnosticAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -122,6 +195,7 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(_openPoseLog());
     WidgetsBinding.instance.addObserver(this);
     unawaited(WakelockPlus.enable());
     unawaited(ScreenBrightness.instance.setApplicationScreenBrightness(0.9));
@@ -136,6 +210,9 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
   @override
   void dispose() {
     _canProcess = false;
+    _flushPoseLog();
+    unawaited(_coach.dispose());
+    _coachAlertTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(WakelockPlus.disable());
     unawaited(ScreenBrightness.instance.resetApplicationScreenBrightness());
@@ -238,8 +315,8 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
       _raisedHandsFrames = 0;
       _currentStepIndex = 0;
       _completedRakats = 0;
-      _stageHoldFrames = 0;
       _stageMissingFrames = 0;
+      _stageMismatchFrames = 0;
       _standingBaselineSamples = 0;
       _standingTiltBaseline = null;
       _standingDepthBaseline = null;
@@ -247,6 +324,9 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
       _standingHipHingeBaseline = null;
       _standingHipYBaseline = null;
       _candidatePosition = null;
+      _candidateSince = null;
+      _sujoodHeadY = null;
+      _jalsaHeadY = null;
       _detectedPosition = _PrayerPosition.unknown;
     });
     await _stopCamera();
@@ -297,6 +377,17 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
       if (_raisedHandsFrames >= _raisedHandsFramesRequired) {
         if (!_prayerStarted) {
           _prayerStarted = true;
+          _poseLog('>>> PRAYER STARTED');
+          _standingHeadY = _frameHeadY;
+          _coach.announceRakat(1, isLast: _rakatCount == 1);
+          _showCoachAlert(
+            _CoachAlert(
+              title: 'First rakat',
+              message: _rakatCount == 1 ? 'This is the last rakat.' : '',
+              isWarning: false,
+            ),
+            duration: const Duration(seconds: 3),
+          );
           _currentStepIndex = 0;
           _completedRakats = 0;
           _prayerComplete = false;
@@ -315,7 +406,9 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
             )
           : _PrayerPosition.unknown;
       if (_prayerStarted) _advancePrayerSequence(_detectedPosition);
-      if (now.difference(_lastPoseDiagnosticAt) >= const Duration(seconds: 1)) {
+      final logEveryFrame = _prayerStarted && _poseLogFile != null;
+      if (logEveryFrame ||
+          now.difference(_lastPoseDiagnosticAt) >= const Duration(seconds: 1)) {
         final poseStatus = _prayerStarted
             ? 'detected=${_detectedPosition.name} expected=${_activePrayerStage.label} '
                   'S-H-K=${_shoulderHipKneeAngle.round()} '
@@ -329,13 +422,19 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
                   'hipY=${_lastHipY.toStringAsFixed(2)} '
                   'headFootGap=${_lastHeadFootGap.toStringAsFixed(2)} '
                   'headFoot2d=${_lastHeadFootDistance.toStringAsFixed(2)} '
+                  'sujoodY=${_sujoodHeadY?.toStringAsFixed(2)} '
+                  'jalsaY=${_jalsaHeadY?.toStringAsFixed(2)} '
                   'rakat=${math.min(_completedRakats + 1, _rakatCount)}/$_rakatCount'
             : 'framingReady=${frameAssessment.isReady} '
                   'locked=$_framingConfirmed confidence=${frameAssessment.confidence.toStringAsFixed(2)} '
                   'head=${frameAssessment.hasHead} feet=${frameAssessment.hasFeet} '
                   'handsRaised=$handsRaised raisedFrames=$_raisedHandsFrames';
-        debugPrint('[SalahPose] $poseStatus');
-        _lastPoseDiagnosticAt = now;
+        _poseLog(poseStatus);
+        if (now.difference(_lastPoseDiagnosticAt) >=
+            const Duration(seconds: 1)) {
+          debugPrint('[SalahPose] $poseStatus');
+          _lastPoseDiagnosticAt = now;
+        }
       }
       setState(() {
         _pose = detectedPose;
@@ -480,6 +579,8 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
     if (pose == null || imageSize == null || rotation == null) {
       return _PrayerPosition.unknown;
     }
+    _frameHeadY = null;
+    _frameHipY = null;
     final head = _bestMovementLandmark(pose, const [
       PoseLandmarkType.nose,
       PoseLandmarkType.leftEar,
@@ -504,6 +605,7 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
     final hip = _averageMotionPoints(
       hips.map((landmark) => _motionPoint(landmark, imageSize, rotation)),
     );
+    _frameHipY = hip.y;
     if (head == null) {
       final lowTorso = shoulder.y > 0.42 && hip.y > 0.48;
       final foldedTorso =
@@ -516,6 +618,7 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
 
     final headPoint = _motionPoint(head, imageSize, rotation);
     _lastHeadY = headPoint.y;
+    _frameHeadY = headPoint.y;
     final ankles = _movementLandmarks(pose, const [
       PoseLandmarkType.leftAnkle,
       PoseLandmarkType.rightAnkle,
@@ -708,6 +811,15 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
     final headAlignedWithBack = headBackAlignmentAngle < 40;
     final clearHipHinge = hipHingeAngle > hipHingeThreshold;
     final expectedSitting = expectedPosition == _PrayerPosition.sitting;
+    // Rising to stand (Qawmah / next Qiyam): an opened hip is the reliable
+    // signal. Camera perspective can make an upright back read 30°+ tilted,
+    // so don't rely on the stricter standing thresholds here.
+    if (expectedPosition == _PrayerPosition.standing &&
+        hipAngle > 140 &&
+        torsoTilt < 45 &&
+        headPoint.y < hip.y) {
+      return _PrayerPosition.standing;
+    }
     final hipLoweredFromStanding =
         _standingHipYBaseline != null &&
         hip.y > _standingHipYBaseline! + bodyHeight * 0.08;
@@ -787,50 +899,310 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
     }
     final stages = _prayerStages;
     final currentStage = stages[_currentStepIndex];
-    if (currentStage.isFinal) return;
-    final nextStage = stages[_currentStepIndex + 1];
+    final headY = _frameHeadY;
+
+    // Track how low the head went in sujood and how high it came in jalsa so
+    // the next step can be checked against this person's own movement.
+    if (headY != null) {
+      if (currentStage.position == _PrayerPosition.prostration &&
+          position == _PrayerPosition.prostration) {
+        _sujoodHeadY = math.max(_sujoodHeadY ?? headY, headY);
+      } else if (currentStage.position == _PrayerPosition.sitting &&
+          position == _PrayerPosition.sitting) {
+        _jalsaHeadY = math.min(_jalsaHeadY ?? headY, headY);
+      } else if (currentStage.position == _PrayerPosition.standing &&
+          position == _PrayerPosition.standing) {
+        final standing = _standingHeadY;
+        // Smoothed, ignoring single-frame landmark jumps.
+        if (standing == null) {
+          _standingHeadY = headY;
+        } else if ((headY - standing).abs() < 0.12) {
+          _standingHeadY = standing * 0.8 + headY * 0.2;
+        }
+      }
+    }
+
+    final upcomingStage = currentStage.isFinal
+        ? null
+        : stages[_currentStepIndex + 1];
+    if (_checkForMistakes(currentStage, upcomingStage, position, headY)) {
+      return;
+    }
+    if (upcomingStage == null) return;
+    final nextStage = upcomingStage;
+    // Sitting up from sujood often scrambles the hip/knee landmarks while the
+    // head is still tracked reliably, so a clear head rise counts as sitting.
+    final sujoodLevel = _sujoodHeadY;
+    if (currentStage.position == _PrayerPosition.prostration &&
+        nextStage.position == _PrayerPosition.sitting &&
+        headY != null &&
+        sujoodLevel != null &&
+        headY <= sujoodLevel - _sittingFromSujoodHeadRise) {
+      position = _PrayerPosition.sitting;
+    }
     if (position == _PrayerPosition.unknown) {
       if (_candidatePosition == nextStage.position) {
         _stageMissingFrames++;
         if (_stageMissingFrames > 8) {
           _candidatePosition = null;
-          _stageHoldFrames = 0;
+          _candidateSince = null;
           _stageMissingFrames = 0;
+          _stageMismatchFrames = 0;
         }
       }
       return;
     }
-    if (position != nextStage.position) {
-   
+    if (position != nextStage.position ||
+        !_meetsTransition(currentStage.position, nextStage.position, headY)) {
+      if (_candidatePosition == nextStage.position &&
+          _stageMismatchFrames < 2) {
+        _stageMismatchFrames++;
+        return;
+      }
       _candidatePosition = null;
-      _stageHoldFrames = 0;
+      _candidateSince = null;
       _stageMissingFrames = 0;
+      _stageMismatchFrames = 0;
       return;
     }
-    if (_candidatePosition == position) {
-      _stageHoldFrames++;
-    } else {
+    final now = DateTime.now();
+    if (_candidatePosition != position) {
       _candidatePosition = position;
-      _stageHoldFrames = 1;
+      _candidateSince = now;
     }
     _stageMissingFrames = 0;
-    final confirmationFrames = switch (position) {
-      _PrayerPosition.prostration => 1,
-      _PrayerPosition.sitting => 2,
-      _ => _raisedHandsFramesRequired,
+    _stageMismatchFrames = 0;
+    final holdRequired = switch (position) {
+      _PrayerPosition.prostration => _sujoodHold,
+      _PrayerPosition.sitting => _sittingHold,
+      _ => _standingOrBowingHold,
     };
-    if (_stageHoldFrames < confirmationFrames) return;
+    if (now.difference(_candidateSince!) < holdRequired) return;
     if (currentStage.completesRakat) _completedRakats++;
     _currentStepIndex++;
-    _stageHoldFrames = 0;
+    _poseLog('>>> STAGE -> ${stages[_currentStepIndex].label}');
+    _onStageEntered(stages[_currentStepIndex]);
+    if (position == _PrayerPosition.prostration) {
+      _sujoodHeadY = headY;
+    } else if (position == _PrayerPosition.sitting) {
+      _jalsaHeadY = headY;
+    }
+    _candidateSince = null;
     _stageMissingFrames = 0;
+    _stageMismatchFrames = 0;
     _candidatePosition = null;
   }
 
   double _runningMean(double? current, double value, int sampleCount) =>
       ((current ?? 0) * (sampleCount - 1) + value) / sampleCount;
 
+  void _onStageEntered(_PrayerStage stage) {
+    _stageEnteredAt = DateTime.now();
+    // Moving on means a pending mistake was corrected.
+    if (_coachAlert?.isWarning ?? false) _hideCoachAlert();
+    if (stage.label == 'Qiyam') {
+      _coach.announceRakat(stage.rakat, isLast: stage.rakat == _rakatCount);
+      _showCoachAlert(
+        _CoachAlert(
+          title: '${_rakatOrdinal(stage.rakat)} rakat',
+          message: stage.rakat == _rakatCount ? 'This is the last rakat.' : '',
+          isWarning: false,
+        ),
+        duration: const Duration(seconds: 3),
+      );
+    }
+    if (stage.isFinal && _sahwNeeded) {
+      _coach.say(PrayerCue.rememberSahw);
+      _showCoachAlert(
+        _CoachAlert.fromCue(PrayerCue.rememberSahw),
+        duration: const Duration(seconds: 8),
+      );
+    }
+  }
+
+  static String _rakatOrdinal(int n) {
+    const words = [
+      'First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', //
+      'Eighth', 'Ninth', 'Tenth',
+    ];
+    if (n >= 1 && n <= words.length) return words[n - 1];
+    final suffix = (n % 100 >= 11 && n % 100 <= 13)
+        ? 'th'
+        : switch (n % 10) {
+            1 => 'st',
+            2 => 'nd',
+            3 => 'rd',
+            _ => 'th',
+          };
+    return '$n$suffix';
+  }
+
+  void _showCoachAlert(_CoachAlert alert, {required Duration duration}) {
+    _coachAlertTimer?.cancel();
+    _coachAlert = alert;
+    _coachAlertTimer = Timer(duration, () {
+      if (mounted) setState(_hideCoachAlert);
+    });
+    if (mounted) setState(() {});
+  }
+
+  void _hideCoachAlert() {
+    _coachAlertTimer?.cancel();
+    _coachAlertTimer = null;
+    _coachAlert = null;
+  }
+
+  /// Head back at standing height (or the classifier says standing).
+  bool _looksUpright(_PrayerPosition position, double? headY) {
+    final standing = _standingHeadY;
+    final hipY = _frameHipY;
+    if (headY == null || standing == null) {
+      return position == _PrayerPosition.standing;
+    }
+    return headY <= standing + _uprightHeadTolerance &&
+        (hipY == null || headY < hipY - 0.12);
+  }
+
+  bool _looksProstrate(_PrayerPosition position, double? headY) {
+    final hipY = _frameHipY;
+    return position == _PrayerPosition.prostration &&
+        headY != null &&
+        hipY != null &&
+        headY >= hipY - _sujoodHeadAboveHipTolerance;
+  }
+
+  /// Watches for a position that doesn't belong next in the prayer and speaks
+  /// a reminder. The tracker stays on the current step until the person goes
+  /// back and does it, except for a skipped first tashahhud, which is not
+  /// returned to once standing. Returns true if it moved the prayer forward.
+  bool _checkForMistakes(
+    _PrayerStage current,
+    _PrayerStage? next,
+    _PrayerPosition position,
+    double? headY,
+  ) {
+    PrayerCue? cue;
+    if (current.isFinal) {
+      // Standing up after the final sitting has gone on a while is just the
+      // end of the prayer.
+      final enteredAt = _stageEnteredAt;
+      final justSatDown =
+          enteredAt != null &&
+          DateTime.now().difference(enteredAt) < _finalSittingGrace;
+      if (justSatDown && _looksUpright(position, headY)) {
+        cue = PrayerCue.extraRakat;
+      }
+    } else if (current.label == 'Qiyam') {
+      if (_looksProstrate(position, headY)) cue = PrayerCue.missedRuku;
+    } else if (current.label == 'Ruku') {
+      if (_looksProstrate(position, headY)) cue = PrayerCue.missedQawmah;
+    } else if (current.label == 'Jalsa') {
+      if (_looksUpright(position, headY)) cue = PrayerCue.missedSecondSujood;
+    } else if (current.completesRakat && next != null) {
+      if (next.isFinal) {
+        if (_looksUpright(position, headY)) cue = PrayerCue.extraRakat;
+      } else if (next.position == _PrayerPosition.sitting) {
+        if (_looksUpright(position, headY)) {
+          cue = PrayerCue.missedFirstTashahhud;
+        }
+      } else if (position == _PrayerPosition.sitting) {
+        cue = PrayerCue.standForNextRakat;
+      }
+    }
+
+    if (cue == null) {
+      if (_mistakeCue != null && _mistakeGlitchFrames < 2) {
+        _mistakeGlitchFrames++;
+      } else {
+        _mistakeCue = null;
+        _mistakeSince = null;
+        _mistakeGlitchFrames = 0;
+      }
+      return false;
+    }
+    _mistakeGlitchFrames = 0;
+    final now = DateTime.now();
+    if (cue != _mistakeCue) {
+      _mistakeCue = cue;
+      _mistakeSince = now;
+      return false;
+    }
+    // Sitting briefly before standing is normal, so only remind after a while.
+    final hold = cue == PrayerCue.standForNextRakat
+        ? _sittingTooLongHold
+        : _mistakeHold;
+    if (now.difference(_mistakeSince!) < hold) return false;
+    final spokenAt = _mistakeSpokenAt;
+    if (_mistakeSpokenCue == cue &&
+        spokenAt != null &&
+        now.difference(spokenAt) < _mistakeRepeatInterval) {
+      return false;
+    }
+    _mistakeSpokenCue = cue;
+    _mistakeSpokenAt = now;
+    if (cue != PrayerCue.standForNextRakat) _sahwNeeded = true;
+    _poseLog('>>> COACH ${cue.name}');
+    _coach.say(cue);
+
+    if (cue == PrayerCue.missedFirstTashahhud) {
+      _completedRakats++;
+      _currentStepIndex += 2;
+      _poseLog('>>> STAGE -> ${_prayerStages[_currentStepIndex].label}');
+      _candidatePosition = null;
+      _candidateSince = null;
+      _stageMissingFrames = 0;
+      _stageMismatchFrames = 0;
+      _mistakeCue = null;
+      _mistakeSince = null;
+      _onStageEntered(_prayerStages[_currentStepIndex]);
+      // Shown after the stage change so it isn't replaced by the rakat banner.
+      _showCoachAlert(
+        _CoachAlert.fromCue(cue),
+        duration: const Duration(seconds: 8),
+      );
+      return true;
+    }
+    // Stays up until the step is corrected (see _onStageEntered), with a
+    // timeout in case the person ignores it.
+    _showCoachAlert(
+      _CoachAlert.fromCue(cue),
+      duration: _mistakeRepeatInterval + const Duration(seconds: 2),
+    );
+    return false;
+  }
+
+  /// Extra checks between sujood and sitting so passing through a kneel on
+  /// the way down can't count as a full sujood → jalsa → sujood cycle.
+  bool _meetsTransition(
+    _PrayerPosition from,
+    _PrayerPosition to,
+    double? headY,
+  ) {
+    final hipY = _frameHipY;
+    if (to == _PrayerPosition.prostration) {
+      // Head must be down at (or below) hip level, not just leaning forward.
+      // Head hidden (common with the face to the floor): trust the pose check.
+      if (headY == null || hipY == null) return true;
+      if (headY < hipY - _sujoodHeadAboveHipTolerance) return false;
+      final sujood = _sujoodHeadY;
+      final jalsa = _jalsaHeadY;
+      if (from == _PrayerPosition.sitting && sujood != null && jalsa != null) {
+        // Second sujood: head has to come back down most of the way.
+        return headY >= jalsa + (sujood - jalsa) * 0.5;
+      }
+      return true;
+    }
+    if (to == _PrayerPosition.sitting && from == _PrayerPosition.prostration) {
+      if (headY == null) return false;
+      final sujood = _sujoodHeadY;
+      if (sujood != null) return headY <= sujood - _jalsaMinHeadRise;
+      return hipY != null && headY < hipY - _jalsaMinHeadRise;
+    }
+    return true;
+  }
+
   void _resetPrayerProgress() {
+    _poseLog('>>> RESET');
     _isPaused = false;
     _isFullView = false;
     _prayerStarted = false;
@@ -838,9 +1210,22 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
     _raisedHandsFrames = 0;
     _currentStepIndex = 0;
     _completedRakats = 0;
-    _stageHoldFrames = 0;
     _stageMissingFrames = 0;
+    _stageMismatchFrames = 0;
     _candidatePosition = null;
+    _candidateSince = null;
+    _sujoodHeadY = null;
+    _jalsaHeadY = null;
+    _standingHeadY = null;
+    _mistakeCue = null;
+    _mistakeSince = null;
+    _mistakeGlitchFrames = 0;
+    _mistakeSpokenCue = null;
+    _mistakeSpokenAt = null;
+    _sahwNeeded = false;
+    _stageEnteredAt = null;
+    _coach.clear();
+    _hideCoachAlert();
     _detectedPosition = _PrayerPosition.unknown;
     _assessment = _assessment.withConfirmation(_framingConfirmed);
   }
@@ -1155,6 +1540,12 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
                           child: _buildStageRail(),
                         ),
                       if (!cameraReady) _buildCameraPlaceholder(),
+                      Positioned(
+                        top: 8,
+                        left: 12,
+                        right: 12,
+                        child: IgnorePointer(child: _buildCoachAlert()),
+                      ),
                     ],
                   ),
                 ),
@@ -1169,6 +1560,81 @@ class _SalahPoseSetupScreenState extends State<SalahPoseSetupScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCoachAlert() {
+    final alert = _coachAlert;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween(
+            begin: const Offset(0, -0.3),
+            end: Offset.zero,
+          ).animate(animation),
+          child: child,
+        ),
+      ),
+      child: alert == null
+          ? const SizedBox.shrink(key: ValueKey('no-alert'))
+          : Container(
+              key: ValueKey('${alert.title}|${alert.message}'),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: alert.isWarning
+                    ? const Color(0xF2B45309)
+                    : const Color(0xE6145C34),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: alert.isWarning ? const Color(0xFFFBBF24) : _green,
+                  width: 1.5,
+                ),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black45, blurRadius: 16),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    alert.isWarning
+                        ? Icons.warning_amber_rounded
+                        : Icons.record_voice_over_rounded,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          alert.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if (alert.message.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            alert.message,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
@@ -2025,6 +2491,23 @@ Offset _mapPoint(
 }
 
 enum _PrayerPosition { standing, bowing, prostration, sitting, unknown }
+
+class _CoachAlert {
+  const _CoachAlert({
+    required this.title,
+    required this.message,
+    required this.isWarning,
+  });
+
+  _CoachAlert.fromCue(PrayerCue cue)
+    : title = cue.title,
+      message = cue.message,
+      isWarning = true;
+
+  final String title;
+  final String message;
+  final bool isWarning;
+}
 
 class _PrayerStage {
   const _PrayerStage(
