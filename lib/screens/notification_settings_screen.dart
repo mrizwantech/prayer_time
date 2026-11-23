@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -14,10 +17,10 @@ class NotificationSettingsScreen extends StatefulWidget {
 
 class _NotificationSettingsScreenState extends State<NotificationSettingsScreen> {
   bool _permissionsGranted = false;
-  bool _batteryOptimizationDisabled = false;
-  bool _overlayPermissionGranted = false;
+  bool _batteryOptimizationDisabled = true;
+  bool _overlayPermissionGranted = true;
   bool _checking = true;
-  
+
   static const platform = MethodChannel('com.mrizwantech.azanify/battery');
 
   @override
@@ -32,64 +35,60 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
       final service = AdhanNotificationService();
       // Request will also check if already granted
       final granted = await service.requestPermissions();
-      
-      debugPrint('=== PERMISSION CHECK ===');
-      debugPrint('Notification permission: $granted');
-      
-      // Check battery optimization status
-      bool batteryUnrestricted = false;
-      try {
-        batteryUnrestricted = await platform.invokeMethod('isIgnoringBatteryOptimizations');
-        debugPrint('Battery unrestricted: $batteryUnrestricted');
-      } catch (e) {
-        debugPrint('Error checking battery optimization: $e');
+
+      // Battery optimization and overlay permissions only exist on Android.
+      bool batteryUnrestricted = true;
+      bool overlayGranted = true;
+      if (Platform.isAndroid) {
+        batteryUnrestricted = false;
+        try {
+          batteryUnrestricted = await platform.invokeMethod('isIgnoringBatteryOptimizations');
+        } catch (e) {
+          debugPrint('Error checking battery optimization: $e');
+        }
+        overlayGranted = false;
+        try {
+          overlayGranted = await platform.invokeMethod('canDrawOverlays');
+        } catch (e) {
+          debugPrint('Error checking overlay permission: $e');
+        }
       }
-      
-      // Check overlay permission (optional; only needed if FSI fails)
-      bool overlayGranted = false;
-      try {
-        overlayGranted = await platform.invokeMethod('canDrawOverlays');
-        debugPrint('Overlay permission: $overlayGranted');
-      } catch (e) {
-        debugPrint('Error checking overlay permission: $e');
-      }
-      
+
+      if (!mounted) return;
       setState(() {
         _permissionsGranted = granted;
         _batteryOptimizationDisabled = batteryUnrestricted;
         _overlayPermissionGranted = overlayGranted;
         _checking = false;
       });
-      
-      debugPrint('=== PERMISSION STATUS ===');
-      debugPrint('All permissions granted: $_permissionsGranted');
-      debugPrint('Battery unrestricted: $_batteryOptimizationDisabled');
     } catch (e) {
       debugPrint('Error checking permissions: $e');
-      setState(() => _checking = false);
+      if (mounted) setState(() => _checking = false);
     }
   }
 
   Future<void> _requestBatteryOptimization() async {
     try {
-      await platform.invokeMethod('requestIgnoreBatteryOptimizations');
-      // Wait a bit for user to complete the action, then recheck
-      await Future.delayed(Duration(seconds: 2));
+      await platform.invokeMethod('requestDisableBatteryOptimization');
+      await Future.delayed(const Duration(seconds: 2));
       _checkPermissions();
     } catch (e) {
       debugPrint('Error requesting battery optimization: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Please disable battery optimization manually in Settings')),
+          const SnackBar(content: Text('Please disable battery optimization manually in Settings')),
         );
       }
     }
   }
 
+  bool get _allGood =>
+      _permissionsGranted && _batteryOptimizationDisabled;
+
   @override
   Widget build(BuildContext context) {
     final prayerService = Provider.of<PrayerTimeService>(context);
-    
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -102,389 +101,238 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
               showLocation: true,
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Permission Status
-                    if (!_permissionsGranted || !_batteryOptimizationDisabled) ...[
-                      Card(
-                        color: Colors.red.shade50,
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.warning_amber_rounded,
-                                color: Colors.red.shade700,
-                                size: 48,
-                              ),
-                              SizedBox(height: 12),
-                              Text(
-                                'App May Not Work Properly',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.red.shade900,
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Some permissions are missing. Without them:\n'
-                                '• You may not receive prayer time alerts\n'
-                                '• Notifications may be delayed or blocked\n'
-                                '• Adhan player may not open automatically\n\n'
-                                'Please enable the required permissions below. Overlay is optional and only needed if the adhan screen does not appear.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.red.shade800,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ] else ...[
-                      Card(
-                        color: Colors.green.shade50,
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              Icon(
-                                Icons.check_circle,
-                                color: Colors.green,
-                                size: 48,
-                              ),
-                              SizedBox(height: 12),
-                              Text(
-                                'All Set! ✅',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.green.shade900,
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'All permissions are granted. You will receive prayer notifications reliably.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.green.shade800,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                    SizedBox(height: 24),
-
-                    // Setup Instructions
-                    Text(
-                      'Setup Checklist',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 16),
-
-                    _buildChecklistItem(
-                      '1. Allow Notifications',
-                      'Required to alert you when it\'s time for prayer. Without this, you won\'t receive any prayer reminders.',
-                      Icons.notifications,
-                      _permissionsGranted,
-                    ),
-                    _buildChecklistItem(
-              '2. Allow Exact Alarms',
-              'Ensures notifications arrive at the exact prayer time, not delayed by Android\'s battery saving.',
-              Icons.alarm,
-              _permissionsGranted,
-              action: _permissionsGranted ? null : () async {
-                // Open app settings for exact alarms
-                try {
-                  await platform.invokeMethod('openExactAlarmSettings');
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Go to Settings → Apps → Azanify → Alarms & Reminders → Allow')),
-                    );
-                  }
-                }
-              },
-              actionLabel: 'Open Settings',
-            ),
-            _buildChecklistItem(
-              '3. Disable Battery Optimization',
-              'Prevents Android from killing the app in background. Critical for reliable notifications when phone is asleep.',
-              Icons.battery_charging_full,
-              _batteryOptimizationDisabled,
-              action: _batteryOptimizationDisabled ? null : () => _requestBatteryOptimization(),
-              actionLabel: 'Disable',
-            ),
-                    _buildChecklistItem(
-              '4. Keep App in Recent Apps',
-              'Don\'t swipe away the app from recent apps list',
-              Icons.apps,
-              false,
-            ),
-
-            SizedBox(height: 16),
-
-            Text(
-              'Optional',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 8),
-            _buildChecklistItem(
-              'Display Over Other Apps (Optional)',
-              'Only enable if the adhan screen fails to pop over other apps. It helps launch the adhan player on some devices.',
-              Icons.picture_in_picture,
-              _overlayPermissionGranted,
-              action: _overlayPermissionGranted ? null : () async {
-                try {
-                  await platform.invokeMethod('requestOverlayPermission');
-                  await Future.delayed(Duration(seconds: 2));
-                  _checkPermissions();
-                } catch (e) {
-                  debugPrint('Error requesting overlay permission: $e');
-                }
-              },
-              actionLabel: 'Allow',
-            ),
-
-            SizedBox(height: 24),
-            
-            // Debug Info Card
-            Card(
-              color: Colors.grey.shade100,
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.bug_report, color: Colors.grey.shade700),
-                        SizedBox(width: 8),
-                        Text(
-                          'Debug Info',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                        Spacer(),
-                        TextButton(
-                          onPressed: () async {
-                            final service = AdhanNotificationService();
-                            final pending = await service.getPendingNotifications();
-                            if (mounted) {
-                              showDialog(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: Text('Pending Notifications (${pending.length})'),
-                                  content: SingleChildScrollView(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: pending.isEmpty 
-                                        ? [Text('No pending notifications scheduled')]
-                                        : pending.map((n) => Padding(
-                                            padding: EdgeInsets.only(bottom: 8),
-                                            child: Text('ID ${n.id}: ${n.title}\n${n.payload ?? ""}', 
-                                              style: TextStyle(fontSize: 12)),
-                                          )).toList(),
-                                    ),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: Text('Close'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                          },
-                          child: Text('View Pending'),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Tap "View Pending" to see scheduled notifications.\nUse test buttons below to verify alarms work.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            SizedBox(height: 16),
-            
-            // Test Notification Button
-            Card(
-              color: Colors.blue.shade50,
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Icon(Icons.notifications_active, color: Colors.blue, size: 32),
-                    SizedBox(height: 8),
-                    Text(
-                      'Test Notifications',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Send an immediate test notification',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final service = AdhanNotificationService();
-                        // Send immediate notification (no scheduling)
-                        await service.showImmediateNotification(
-                          id: 999,
-                          title: '🕌 Test Notification',
-                          body: 'If you see this, notifications are working!',
-                        );
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('✅ Test notification sent! Check your notification tray.'),
-                              duration: Duration(seconds: 3),
+              child: _checking
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _statusCard(),
+                          const SizedBox(height: 16),
+                          if (Platform.isAndroid) ...[
+                            const Text(
+                              'Setup Checklist',
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             ),
-                          );
-                        }
-                      },
-                      icon: Icon(Icons.send),
-                      label: Text('Send Test NOW'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final service = AdhanNotificationService();
-                        final testTime = DateTime.now().add(Duration(seconds: 10));
-                        await service.schedulePrayerNotification(
-                          id: 998,
-                          prayerName: 'Test',
-                          prayerTime: testTime,
-                          nextPrayerTime: testTime.add(Duration(hours: 1)),
-                        );
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('⏰ Scheduled test in 10 seconds. Wait for it!'),
-                              duration: Duration(seconds: 5),
+                            const SizedBox(height: 12),
+                            _buildChecklistItem(
+                              'Allow Notifications',
+                              'Required to alert you at prayer times.',
+                              Icons.notifications,
+                              _permissionsGranted,
                             ),
-                          );
-                        }
-                      },
-                      icon: Icon(Icons.alarm),
-                      label: Text('Test Scheduled (10s)'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final service = AdhanNotificationService();
-                        final testTime = DateTime.now().add(Duration(seconds: 15));
-                        await service.schedulePrayerNotification(
-                          id: 997,
-                          prayerName: 'Isha',
-                          prayerTime: testTime,
-                          nextPrayerTime: testTime.add(Duration(hours: 8)),
-                        );
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('🌙 Isha test alarm in 15 seconds. Watch for adhan!'),
-                              duration: Duration(seconds: 5),
+                            _buildChecklistItem(
+                              'Allow Exact Alarms',
+                              'Ensures alerts arrive exactly on time.',
+                              Icons.alarm,
+                              _permissionsGranted,
+                              action: _permissionsGranted
+                                  ? null
+                                  : () async {
+                                      try {
+                                        await platform.invokeMethod('openExactAlarmSettings');
+                                      } catch (e) {
+                                        _toast(
+                                            'Go to Settings → Apps → Azanify → Alarms & Reminders → Allow');
+                                      }
+                                    },
+                              actionLabel: 'Open Settings',
                             ),
-                          );
-                        }
-                      },
-                      icon: Icon(Icons.nightlight_round),
-                      label: Text('Test ISHA Alarm (15s)'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        final service = AdhanNotificationService();
-                        await service.scheduleAllPrayersForToday();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('🔄 Forced reschedule of next prayer alarm!'),
-                              duration: Duration(seconds: 3),
+                            _buildChecklistItem(
+                              'Disable Battery Optimization',
+                              'Prevents Android from blocking alerts while the phone sleeps.',
+                              Icons.battery_charging_full,
+                              _batteryOptimizationDisabled,
+                              action: _batteryOptimizationDisabled ? null : _requestBatteryOptimization,
+                              actionLabel: 'Disable',
                             ),
-                          );
-                        }
-                      },
-                      icon: Icon(Icons.refresh),
-                      label: Text('Force Reschedule Now'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
+                            _buildChecklistItem(
+                              'Display Over Other Apps (optional)',
+                              'Only needed if the adhan screen fails to appear automatically.',
+                              Icons.picture_in_picture,
+                              _overlayPermissionGranted,
+                              action: _overlayPermissionGranted
+                                  ? null
+                                  : () async {
+                                      try {
+                                        await platform.invokeMethod('requestOverlayPermission');
+                                        await Future.delayed(const Duration(seconds: 2));
+                                        _checkPermissions();
+                                      } catch (e) {
+                                        debugPrint('Error requesting overlay permission: $e');
+                                      }
+                                    },
+                              actionLabel: 'Allow',
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          // Developer-only tools; hidden in release builds
+                          if (kDebugMode) _testCard(),
+                        ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            
-            SizedBox(height: 24),
-            Card(
-              color: Colors.amber.shade50,
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Colors.amber.shade900),
-                        SizedBox(width: 8),
-                        Text(
-                          'Important Tips',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.amber.shade900,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 12),
-                    _buildTip('Open the app at least once per day to refresh notifications'),
-                    _buildTip('Make sure your phone is not in Do Not Disturb mode'),
-                    _buildTip('Check that notification sound/vibration is enabled in phone settings'),
-                    _buildTip('If you don\'t receive notifications, try rescheduling in Settings'),
-                  ],
-                ),
-              ),
-            ),
-                  ],
-                ),
-              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _statusCard() {
+    final theme = Theme.of(context);
+    final color = _allGood ? Colors.green : Colors.red;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              _allGood ? Icons.check_circle : Icons.warning_amber_rounded,
+              color: color,
+              size: 40,
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _allGood ? 'Notifications are set up' : 'Notifications need attention',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _allGood
+                        ? 'You will receive prayer alerts reliably.'
+                        : Platform.isAndroid
+                            ? 'Complete the checklist below to receive prayer alerts.'
+                            : 'Allow notifications for Azanify in iPhone Settings.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'Re-check',
+              icon: const Icon(Icons.refresh),
+              onPressed: _checkPermissions,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _testCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.notifications_active, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                const Text(
+                  'Test & Troubleshoot',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final service = AdhanNotificationService();
+                await service.showImmediateNotification(
+                  id: 999,
+                  title: '🕌 Test Notification',
+                  body: 'If you see this, notifications are working!',
+                );
+                _toast('✅ Test notification sent! Check your notification tray.');
+              },
+              icon: const Icon(Icons.send),
+              label: const Text('Send test notification now'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final service = AdhanNotificationService();
+                final testTime = DateTime.now().add(const Duration(seconds: 10));
+                await service.schedulePrayerNotification(
+                  id: 998,
+                  prayerName: 'Test',
+                  prayerTime: testTime,
+                  nextPrayerTime: testTime.add(const Duration(hours: 1)),
+                );
+                _toast('⏰ Test prayer alert in 10 seconds — lock the phone and wait!');
+              },
+              icon: const Icon(Icons.alarm),
+              label: const Text('Test prayer alert (10s)'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final service = AdhanNotificationService();
+                await service.scheduleAllPrayersForToday();
+                _toast('🔄 Prayer alerts rescheduled.');
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reschedule all prayer alerts'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _showPendingNotifications,
+              icon: const Icon(Icons.list_alt),
+              label: const Text('View scheduled notifications'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPendingNotifications() async {
+    final service = AdhanNotificationService();
+    final pending = await service.getPendingNotifications();
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Pending Notifications (${pending.length})'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: pending.isEmpty
+                ? [const Text('No pending notifications scheduled.\n\nNote: on iPhone, prayer alerts scheduled as alarms are not listed here.')]
+                : pending
+                    .map((n) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            'ID ${n.id}: ${n.title}\n${n.payload ?? ""}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ))
+                    .toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 3)));
   }
 
   Widget _buildChecklistItem(
@@ -496,41 +344,17 @@ class _NotificationSettingsScreenState extends State<NotificationSettingsScreen>
     String? actionLabel,
   }) {
     return Card(
-      margin: EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
         leading: Icon(
           completed ? Icons.check_circle : icon,
           color: completed ? Colors.green : Colors.grey,
         ),
-        title: Text(
-          title,
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(description),
         trailing: action != null
-            ? TextButton(
-                onPressed: action,
-                child: Text(actionLabel ?? 'Action'),
-              )
+            ? TextButton(onPressed: action, child: Text(actionLabel ?? 'Action'))
             : null,
-      ),
-    );
-  }
-
-  Widget _buildTip(String tip) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('• ', style: TextStyle(fontSize: 16, color: Colors.amber.shade900)),
-          Expanded(
-            child: Text(
-              tip,
-              style: TextStyle(fontSize: 13, color: Colors.amber.shade900),
-            ),
-          ),
-        ],
       ),
     );
   }

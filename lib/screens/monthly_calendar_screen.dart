@@ -6,7 +6,6 @@ import 'package:hijri_date/hijri_date.dart';
 import '../core/prayer_time_service.dart';
 import '../core/time_format_settings.dart';
 import '../presentation/widgets/app_header.dart';
-import '../main.dart';
 
 class MonthlyCalendarScreen extends StatefulWidget {
   const MonthlyCalendarScreen({super.key});
@@ -79,7 +78,6 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
   Widget build(BuildContext context) {
     final prayerService = Provider.of<PrayerTimeService>(context);
     final timeSettings = Provider.of<TimeFormatSettings>(context);
-    final theme = Theme.of(context);
 
     final daysInMonth = DateUtils.getDaysInMonth(_focusedMonth.year, _focusedMonth.month);
     final firstWeekday = DateTime(_focusedMonth.year, _focusedMonth.month, 1).weekday; // 1=Mon
@@ -349,27 +347,7 @@ class _MonthlyCalendarScreenState extends State<MonthlyCalendarScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 6, // Settings tab for calendar
-        onTap: (idx) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => MainNavigation(initialIndex: idx)),
-          );
-        },
-        selectedItemColor: theme.colorScheme.primary,
-        unselectedItemColor: theme.colorScheme.onSurface.withOpacity(0.5),
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: theme.colorScheme.surface,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Quran'),
-          BottomNavigationBarItem(icon: Icon(Icons.radio_button_checked), label: 'Tasbeeh'),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
-          BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'Rakat'),
-          BottomNavigationBarItem(icon: Icon(Icons.brush), label: 'Posts'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
-        ],
-      ),
+      bottomNavigationBar: null,
     );
   }
 }

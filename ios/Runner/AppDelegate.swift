@@ -1,6 +1,7 @@
 import ActivityKit
 import AlarmKit
 import AppIntents
+import AVFoundation
 import Flutter
 import SwiftUI
 import UIKit
@@ -32,6 +33,7 @@ final class PrayerAlarmBridge {
   private static let pendingKey = "pending_adhan_launch"
 
   private var adhanChannel: FlutterMethodChannel?
+  private var previewPlayer: AVAudioPlayer?
   private var dartReady = false
 
   func register(with messenger: FlutterBinaryMessenger) {
@@ -43,15 +45,47 @@ final class PrayerAlarmBridge {
     // Same channel Android uses, so Dart's existing adhan-launch handling works unchanged.
     let adhan = FlutterMethodChannel(name: "com.mrizwantech.azanify/adhan", binaryMessenger: messenger)
     adhan.setMethodCallHandler { [weak self] call, result in
-      guard call.method == "consumePendingAdhanLaunch" else {
-        result(FlutterMethodNotImplemented)
+      guard let self else {
+        result(FlutterError(code: "unavailable", message: "Adhan bridge unavailable", details: nil))
         return
       }
-      self?.dartReady = true
-      let defaults = UserDefaults.standard
-      let pending = defaults.string(forKey: Self.pendingKey)
-      defaults.removeObject(forKey: Self.pendingKey)
-      result(pending)
+      switch call.method {
+      case "consumePendingAdhanLaunch":
+        self.dartReady = true
+        let defaults = UserDefaults.standard
+        let pending = defaults.string(forKey: Self.pendingKey)
+        defaults.removeObject(forKey: Self.pendingKey)
+        result(pending)
+      case "previewAdhan":
+        guard
+          let args = call.arguments as? [String: Any],
+          let name = args["soundFile"] as? String,
+          ["adhan_rabeh.caf", "adhan_sharqawe.caf"].contains(name),
+          let url = Bundle.main.url(forResource: name, withExtension: nil)
+        else {
+          result(FlutterError(code: "bad_sound", message: "Preview sound is unavailable", details: nil))
+          return
+        }
+        do {
+          self.previewPlayer?.stop()
+          self.previewPlayer = try AVAudioPlayer(contentsOf: url)
+          let volume = (args["volume"] as? Double) ?? 1.0
+          self.previewPlayer?.volume = Float(max(0.0, min(1.0, volume)))
+          guard self.previewPlayer?.play() == true else {
+            result(FlutterError(code: "preview_failed", message: "Could not play preview", details: nil))
+            return
+          }
+          result(nil)
+        } catch {
+          result(FlutterError(code: "preview_failed", message: error.localizedDescription, details: nil))
+        }
+      case "stopPreview":
+        self.previewPlayer?.stop()
+        self.previewPlayer = nil
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
     }
     adhanChannel = adhan
   }

@@ -11,6 +11,9 @@ class AppHeader extends StatelessWidget {
   final bool showLocation;
   final VoidCallback? onSupport;
   final bool showSupport;
+  /// Stronger contrast for screens with an image background:
+  /// forces white text and draws a soft dark scrim behind the header.
+  final bool overlayStyle;
 
   const AppHeader({
     super.key,
@@ -23,6 +26,7 @@ class AppHeader extends StatelessWidget {
     this.showLocation = true,
     this.onSupport,
     this.showSupport = false,
+    this.overlayStyle = false,
   });
 
   @override
@@ -30,10 +34,8 @@ class AppHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final accentColor = theme.colorScheme.primary;
-    // Force white background and black text for light theme
-    final backgroundColor = isDark ? const Color(0xFF1a1d2e) : Colors.white;
-    final surfaceColor = isDark ? const Color(0xFF252836) : Colors.white;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final textColor =
+        overlayStyle ? Colors.white : (isDark ? Colors.white : Colors.black);
     
     // Determine the location text only if we have data
     String? locationText;
@@ -46,21 +48,21 @@ class AppHeader extends StatelessWidget {
     }
     // Don't show "Fetching location..." or "Unknown Location" - just show nothing
 
+    // Transparent so the screen's background (image/gradient) shows through;
+    // overlayStyle adds a soft scrim so text stays readable over images.
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [backgroundColor, surfaceColor],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      decoration: overlayStyle
+          ? BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.60),
+                  Colors.black.withOpacity(0.50),
+                ],
+              ),
+            )
+          : null,
       padding: EdgeInsets.only(
         left: showBackButton ? 8.0 : 16.0,
         right: 16.0,
@@ -128,7 +130,8 @@ class AppHeader extends StatelessWidget {
                           locationText,
                           style: TextStyle(
                             fontSize: 12,
-                            color: textColor.withOpacity(0.7),
+                            fontWeight: overlayStyle ? FontWeight.w600 : null,
+                            color: textColor.withOpacity(overlayStyle ? 0.95 : 0.7),
                           ),
                         ),
                       ],
@@ -169,35 +172,21 @@ class AppHeader extends StatelessWidget {
 
           if (showSupport && onSupport != null) ...[
             const SizedBox(width: 8),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: textColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: IconButton(
-                    icon: Icon(
-                      Icons.favorite_outline,
-                      color: accentColor,
-                    ),
-                    onPressed: onSupport,
-                    padding: const EdgeInsets.all(8),
-                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                    tooltip: 'Donate',
-                  ),
+            Container(
+              decoration: BoxDecoration(
+                color: textColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: IconButton(
+                icon: Icon(
+                  Icons.favorite_outline,
+                  color: accentColor,
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Donate',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: textColor.withOpacity(0.8),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+                onPressed: onSupport,
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                tooltip: 'Donate',
+              ),
             ),
           ],
         ],

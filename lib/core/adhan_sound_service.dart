@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+enum PrayerSoundMode { defaultTone, adhan, silent }
+
 class AdhanSoundService {
   static final AdhanSoundService _instance = AdhanSoundService._internal();
   factory AdhanSoundService() => _instance;
@@ -16,6 +18,7 @@ class AdhanSoundService {
 
   final AudioPlayer _player = AudioPlayer();
   final AudioPlayer _previewPlayer = AudioPlayer(); // Separate player for previews
+  bool _previewActive = false;
   
   // Platform channel for native adhan service
   static const platform = MethodChannel('com.mrizwantech.azanify/adhan');
@@ -125,6 +128,39 @@ class AdhanSoundService {
   static const String _maghribSoundKey = 'maghrib_sound_enabled';
   static const String _ishaSoundKey = 'isha_sound_enabled';
 
+  Future<PrayerSoundMode> getPrayerSoundMode(String prayerName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('prayer_sound_mode_$prayerName');
+    if (saved != null) {
+      for (final mode in PrayerSoundMode.values) {
+        if (mode.name == saved) return mode;
+      }
+      debugPrint('Invalid sound mode for $prayerName: $saved');
+    }
+    if (prayerName == 'Fajr' && defaultTargetPlatform == TargetPlatform.iOS) {
+      return PrayerSoundMode.defaultTone;
+    }
+    if (prayerName != 'Fajr' && prefs.getString(_selectedAdhanKey) == 'Silent') {
+      return PrayerSoundMode.silent;
+    }
+    return PrayerSoundMode.adhan;
+  }
+
+  Future<void> setPrayerSoundMode(String prayerName, PrayerSoundMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!await prefs.setString('prayer_sound_mode_$prayerName', mode.name)) {
+      throw StateError('Could not save sound mode for $prayerName');
+    }
+  }
+
+  /// iOS only bundles these two notification clips.
+  String? darwinAdhanClip(String adhan) {
+    final name = adhan.toLowerCase();
+    if (name.contains('rabeh')) return 'adhan_rabeh.caf';
+    if (name.contains('sharqawe')) return 'adhan_sharqawe.caf';
+    return null;
+  }
+
   /// Get adhan volume (0.0 to 1.0)
   Future<double> getAdhanVolume() async {
     final prefs = await SharedPreferences.getInstance();
@@ -226,6 +262,10 @@ class AdhanSoundService {
         debugPrint('🔇 Sound disabled for $prayerName - skipping adhan');
         return;
       }
+      if (await getPrayerSoundMode(prayerName) != PrayerSoundMode.adhan) {
+        debugPrint('🔇 Adhan not selected for $prayerName');
+        return;
+      }
 
       // For Fajr prayer, always use 'fajr' adhan if available
       String selectedAdhan;
@@ -234,6 +274,7 @@ class AdhanSoundService {
         debugPrint('🌅 Fajr prayer - using fajr adhan');
       } else {
         selectedAdhan = await getSelectedAdhan();
+        if (selectedAdhan == 'Silent') selectedAdhan = defaultNonFajrAdhan;
       }
       
       if (selectedAdhan == 'Silent') {
@@ -312,19 +353,24 @@ class AdhanSoundService {
         return;
       }
       
-      // Set volume for preview
       final volume = await getAdhanVolume();
-      await _previewPlayer.setVolume(volume);
-      await _previewPlayer.stop();
-      
-      // Preview using native service (same as actual playback)
       debugPrint('🔊 Previewing adhan: $adhanName');
       try {
-        await platform.invokeMethod('playAdhan', {
-          'prayerName': 'Preview',
-          'soundFile': adhanName,
-          'volume': volume,
-        });
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          final clip = darwinAdhanClip(adhanName);
+          if (clip == null) throw StateError('No iOS clip for $adhanName');
+          await platform.invokeMethod('previewAdhan', {
+            'soundFile': clip,
+            'volume': volume,
+          });
+        } else {
+          await platform.invokeMethod('playAdhan', {
+            'prayerName': 'Preview',
+            'soundFile': adhanName,
+            'volume': volume,
+          });
+        }
+        _previewActive = true;
       } catch (e) {
         debugPrint('❌ Error previewing adhan: $e');
         rethrow;
@@ -339,6 +385,12 @@ class AdhanSoundService {
   /// Stop preview
   Future<void> stopPreview() async {
     try {
+      if (_previewActive && defaultTargetPlatform == TargetPlatform.iOS) {
+        await platform.invokeMethod('stopPreview');
+      } else if (_previewActive && defaultTargetPlatform == TargetPlatform.android) {
+        await platform.invokeMethod('stopPreview');
+      }
+      _previewActive = false;
       await _previewPlayer.stop();
       debugPrint('🛑 Preview stopped');
     } catch (e) {

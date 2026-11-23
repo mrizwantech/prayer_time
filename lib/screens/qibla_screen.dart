@@ -1,7 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:islamic_prayer_times/presentation/widgets/qibla_compass.dart';
 import '../presentation/widgets/app_header.dart';
+import '../presentation/widgets/home_background.dart';
 import 'package:provider/provider.dart';
 import '../core/prayer_time_service.dart';
 
@@ -11,54 +11,65 @@ class QiblaScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final prayerService = Provider.of<PrayerTimeService>(context);
-    
+
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            AppHeader(
-              city: prayerService.city,
-              state: prayerService.state,
-              isLoading: prayerService.isLoading,
-              onRefresh: () => prayerService.refresh(),
-              showLocation: true,
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Qibla Direction',
-                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+      body: HomeBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              AppHeader(
+                city: prayerService.city,
+                state: prayerService.state,
+                isLoading: prayerService.isLoading,
+                onRefresh: () => prayerService.refresh(),
+                showLocation: true,
+                overlayStyle: true,
+              ),
+              Expanded(
+                child: Material(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.surface.withOpacity(0.75),
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Qibla Direction',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          Container(
+                            width: 220,
+                            height: 220,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.05),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Center(child: QiblaCompass()),
+                          ),
+                          const SizedBox(height: 32),
+                          const Text(
+                            'If the compass is spinning or shows a warning, please calibrate your device by moving it in a figure-eight motion away from metal objects.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 40),
+                        ],
                       ),
-                      const SizedBox(height: 32),
-                      Container(
-                        width: 220,
-                        height: 220,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.05),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(child: QiblaCompass()),
-                      ),
-                      const SizedBox(height: 32),
-                      const Text(
-                        'If the compass is spinning or shows a warning, please calibrate your device by moving it in a figure-eight motion away from metal objects.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 40),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

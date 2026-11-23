@@ -93,6 +93,13 @@ class MainActivity : FlutterActivity() {
                     stopAdhan()
                     result.success(null)
                 }
+                "stopPreview" -> {
+                    val intent = Intent(this, AdhanService::class.java).apply {
+                        action = AdhanService.ACTION_STOP_PREVIEW
+                    }
+                    startService(intent)
+                    result.success(null)
+                }
                 "pauseAdhan" -> {
                     Log.d("MainActivity", "pauseAdhan called from Flutter")
                     pauseAdhan()

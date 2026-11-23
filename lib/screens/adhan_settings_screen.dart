@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../core/adhan_sound_service.dart';
+import '../core/adhan_notification_service.dart';
 import '../core/prayer_time_service.dart';
 import '../presentation/widgets/app_header.dart';
 
@@ -28,6 +29,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
 
   // Prayer settings
   List<PrayerNotificationSetting> _prayerSettings = [];
+  static const _soundPrayers = {'Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'};
 
   // Theme colors matching the app's dark theme
   static const _backgroundColor = Color(0xFF1a1d2e);
@@ -46,7 +48,9 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     final adhan = await _soundService.getSelectedAdhan();
     // Exclude 'fajr' from selection - it's reserved for Fajr prayer only
-    final adhans = await _soundService.getAvailableAdhans(excludeFajr: true);
+    final adhans = (await _soundService.getAvailableAdhans(excludeFajr: true))
+        .where((name) => name != 'Silent')
+        .toList();
     final volume = await _soundService.getAdhanVolume();
 
     // Use prayer times passed from parent or defaults
@@ -72,9 +76,6 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
       final prayerName = entry.key;
       final prayerTime = entry.value;
 
-      // Fajr's own adhan can't play on iOS, so its row is Android-only.
-      if (!Platform.isAndroid && prayerName == 'Fajr') continue;
-
       // Load enabled state
       final isEnabled =
           prefs.getBool('prayer_enabled_$prayerName') ??
@@ -91,6 +92,11 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
 
       // Load offset minutes (how many minutes before prayer time)
       final offsetMinutes = prefs.getInt('prayer_offset_$prayerName') ?? 0;
+      final soundMode = await _soundService.getPrayerSoundMode(prayerName);
+      if (_soundPrayers.contains(prayerName) &&
+          !prefs.containsKey('prayer_sound_mode_$prayerName')) {
+        await _soundService.setPrayerSoundMode(prayerName, soundMode);
+      }
 
       settings.add(
         PrayerNotificationSetting(
@@ -99,6 +105,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
           isEnabled: isEnabled,
           selectedDays: days,
           offsetMinutes: offsetMinutes,
+          soundMode: soundMode,
         ),
       );
     }
@@ -115,6 +122,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
   }
 
   Future<void> _savePrayerSetting(PrayerNotificationSetting setting) async {
+    final prayerService = context.read<PrayerTimeService>();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('prayer_enabled_${setting.name}', setting.isEnabled);
     await prefs.setStringList(
@@ -125,6 +133,58 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
 
     // Update notification service
     await _soundService.setSoundEnabled(setting.name, setting.isEnabled);
+    await _rescheduleIos(prayerService);
+  }
+
+  Future<void> _rescheduleIos(PrayerTimeService service) async {
+    if (!Platform.isIOS) return;
+    if (!service.hasLocation) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Settings saved. Location is needed to update prayer alerts.'),
+        ));
+      }
+      return;
+    }
+    try {
+      await AdhanNotificationService().rescheduleIosPrayerNotifications(
+        latitude: service.latitude!,
+        longitude: service.longitude!,
+      );
+    } catch (error) {
+      debugPrint('Could not update prayer alerts: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Settings saved, but prayer alerts could not be updated.'),
+        ));
+      }
+    }
+  }
+
+  Future<void> _setPrayerSoundMode(
+    PrayerNotificationSetting setting,
+    PrayerSoundMode mode,
+  ) async {
+    final prayerService = context.read<PrayerTimeService>();
+    final previousMode = setting.soundMode;
+    setState(() {
+      setting.soundMode = mode;
+      setting.savingSound = true;
+    });
+    try {
+      await _soundService.setPrayerSoundMode(setting.name, mode);
+      await _rescheduleIos(prayerService);
+    } catch (error) {
+      debugPrint('Could not save prayer sound: $error');
+      if (mounted) {
+        setState(() => setting.soundMode = previousMode);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not save the prayer sound setting.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => setting.savingSound = false);
+    }
   }
 
   @override
@@ -292,8 +352,11 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                             )
                           : null,
                       onTap: () async {
+                        final prayerService = context.read<PrayerTimeService>();
                         await _soundService.setSelectedAdhan(adhan);
                         await _soundService.stopPreview();
+                        await _rescheduleIos(prayerService);
+                        if (!mounted || !context.mounted) return;
                         setState(() {
                           _selectedAdhan = adhan;
                           _currentlyPreviewing = null;
@@ -591,13 +654,20 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  _formatAdhanName(_selectedAdhan),
+                                  _selectedAdhan == 'Silent'
+                                      ? 'Choose an adhan'
+                                      : _formatAdhanName(_selectedAdhan),
                                   style: TextStyle(
                                     color: _textColor,
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
+                                if (Platform.isAndroid)
+                                  const Text(
+                                    'Fajr uses its own adhan',
+                                    style: TextStyle(color: _subtitleColor, fontSize: 11),
+                                  ),
                               ],
                             ),
                           ),
@@ -612,7 +682,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                   ),
 
                   // Volume Control Card
-                  Container(
+                  if (Platform.isAndroid) Container(
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
@@ -676,7 +746,7 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                           ),
                         ),
                         Text(
-                          'Controls adhan volume independently of device volume',
+                          'Scales adhan playback relative to device media volume',
                           style: TextStyle(color: _subtitleColor, fontSize: 11),
                         ),
                         const SizedBox(height: 8),
@@ -691,6 +761,12 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
                           ),
                         ),
                       ],
+                    ),
+                  ) else Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Text(
+                      'iPhone alert volume is controlled by iOS and device settings. Adhan alerts use short clips.',
+                      style: TextStyle(color: _subtitleColor, fontSize: 12),
                     ),
                   ),
 
@@ -721,69 +797,99 @@ class _AdhanSettingsScreenState extends State<AdhanSettingsScreen> {
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Prayer name and time
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          Row(
             children: [
-              Text(
-                setting.name,
-                style: TextStyle(color: _subtitleColor, fontSize: 13),
-              ),
-              const SizedBox(height: 4),
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    _formatTime(setting.time),
-                    style: TextStyle(
-                      color: _textColor,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w300,
-                    ),
+                    setting.name,
+                    style: TextStyle(color: _subtitleColor, fontSize: 13),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 2),
-                    child: Text(
-                      _formatPeriod(setting.time),
-                      style: TextStyle(color: _subtitleColor, fontSize: 12),
-                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _formatTime(setting.time),
+                        style: TextStyle(
+                          color: _textColor,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w300,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 2),
+                        child: Text(
+                          _formatPeriod(setting.time),
+                          style: TextStyle(color: _subtitleColor, fontSize: 12),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
+              const Spacer(),
+              GestureDetector(
+                onTap: () => _showDayPicker(setting, index),
+                child: _buildDaySelector(setting),
+              ),
+              const SizedBox(width: 16),
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    setting.isEnabled = !setting.isEnabled;
+                    _prayerSettings[index] = setting;
+                  });
+                  _savePrayerSetting(setting);
+                },
+                child: FaIcon(
+                  setting.isEnabled
+                      ? FontAwesomeIcons.solidBell
+                      : FontAwesomeIcons.bellSlash,
+                  color: setting.isEnabled ? _accentColor : _subtitleColor,
+                  size: 20,
+                ),
+              ),
             ],
           ),
-
-          const Spacer(),
-
-          // Day selector
-          GestureDetector(
-            onTap: () => _showDayPicker(setting, index),
-            child: _buildDaySelector(setting),
-          ),
-
-          const SizedBox(width: 16),
-
-          // Bell icon
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                setting.isEnabled = !setting.isEnabled;
-                _prayerSettings[index] = setting;
-              });
-              _savePrayerSetting(setting);
-            },
-            child: FaIcon(
-              setting.isEnabled
-                  ? FontAwesomeIcons.solidBell
-                  : FontAwesomeIcons.bellSlash,
-              color: setting.isEnabled ? _accentColor : _subtitleColor,
-              size: 20,
+          if (_soundPrayers.contains(setting.name)) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Text('Sound', style: TextStyle(color: _subtitleColor)),
+                const SizedBox(width: 12),
+                DropdownButton<PrayerSoundMode>(
+                  key: ValueKey('sound_mode_${setting.name}'),
+                  value: setting.soundMode,
+                  dropdownColor: _cardColor,
+                  style: const TextStyle(color: _textColor),
+                  items: const [
+                    DropdownMenuItem(
+                      value: PrayerSoundMode.defaultTone,
+                      child: Text('Default tone'),
+                    ),
+                    DropdownMenuItem(
+                      value: PrayerSoundMode.adhan,
+                      child: Text('Adhan'),
+                    ),
+                    DropdownMenuItem(
+                      value: PrayerSoundMode.silent,
+                      child: Text('Silent'),
+                    ),
+                  ],
+                  onChanged: setting.savingSound ? null : (mode) {
+                    if (mode != null) _setPrayerSoundMode(setting, mode);
+                  },
+                ),
+              ],
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -833,6 +939,8 @@ class PrayerNotificationSetting {
   bool isEnabled;
   List<bool> selectedDays;
   int offsetMinutes;
+  PrayerSoundMode soundMode;
+  bool savingSound = false;
 
   PrayerNotificationSetting({
     required this.name,
@@ -840,5 +948,6 @@ class PrayerNotificationSetting {
     this.isEnabled = true,
     List<bool>? selectedDays,
     this.offsetMinutes = 0,
+    this.soundMode = PrayerSoundMode.adhan,
   }) : selectedDays = selectedDays ?? List.filled(7, true);
 }

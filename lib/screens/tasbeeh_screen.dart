@@ -5,6 +5,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import '../presentation/widgets/app_header.dart';
+import '../presentation/widgets/home_background.dart';
 import '../core/prayer_time_service.dart';
 
 class TasbeehScreen extends StatefulWidget {
@@ -602,7 +603,6 @@ class _TasbeehScreenState extends State<TasbeehScreen>
     final isDark = theme.brightness == Brightness.dark;
     final accentColor = theme.colorScheme.primary;
     final textColor = theme.colorScheme.onSurface;
-    final backgroundColor = theme.scaffoldBackgroundColor;
     final surfaceColor = theme.colorScheme.surface;
 
     final dhikr = _dhikrList[_selectedDhikrIndex];
@@ -612,8 +612,8 @@ class _TasbeehScreenState extends State<TasbeehScreen>
         : (_count / _targetCount).clamp(0.0, 1.0);
 
     return Scaffold(
-      backgroundColor: backgroundColor,
-      body: SafeArea(
+      body: HomeBackground(
+        child: SafeArea(
         child: Column(
           children: [
             // App Header - same as home screen
@@ -624,11 +624,14 @@ class _TasbeehScreenState extends State<TasbeehScreen>
                 isLoading: prayerService.isLoading,
                 onRefresh: () => prayerService.refresh(),
                 showLocation: true,
+                overlayStyle: true,
               ),
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: SingleChildScrollView(
+              child: Material(
+                color: surfaceColor.withOpacity(0.75),
+                child: SingleChildScrollView(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -950,9 +953,11 @@ class _TasbeehScreenState extends State<TasbeehScreen>
                     const SizedBox(height: 32),
                   ],
                 ),
+                ),
               ),
             ),
           ],
+        ),
         ),
       ),
     );

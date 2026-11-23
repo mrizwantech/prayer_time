@@ -22,6 +22,7 @@ class AdhanNotificationService {
   final _soundService = AdhanSoundService();
   bool _isAdhanPlayerActive = false; // Prevent multiple launches
   String? _pendingAdhanLaunch; // Queue for pending adhan player launch
+  Future<void> _darwinScheduleTail = Future.value();
 
   bool get isAdhanPlayerActive => _isAdhanPlayerActive;
   bool get hasPendingAdhanLaunch => _pendingAdhanLaunch != null;
@@ -92,10 +93,9 @@ class AdhanNotificationService {
     );
 
     final initialized = await _notifications.initialize(
-      settings,
+      settings: settings,
       onDidReceiveNotificationResponse: _onNotificationTapped,
-      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationTapped,
-    );
+      onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationTapped);
 
     debugPrint('Notification plugin initialized: $initialized');
     debugPrint('Callback registered: ${_onNotificationTapped != null}');
@@ -127,6 +127,9 @@ class AdhanNotificationService {
     
     // Play adhan sound for notification
     final payload = response.payload?.split('|');
+    if (payload != null && payload.length >= 3 && payload[2] != 'adhan') {
+      return;
+    }
     final prayerName = payload != null && payload.isNotEmpty ? payload[0] : null;
     if (prayerName != null) {
       final soundService = AdhanSoundService();
@@ -262,7 +265,7 @@ class AdhanNotificationService {
       
       final iosSound = Platform.isAndroid ? null : await _darwinAdhanSound(prayerName);
 
-      if (iosSound != '' &&
+      if (iosSound != null && iosSound != '' &&
           await _iosAlarmsAuthorized() &&
           await _scheduleIosAlarm(prayerName, 'Time for $prayerName Prayer', prayerTime, iosSound)) {
         debugPrint('✅ AlarmKit alarm scheduled for $prayerName at $prayerTime');
@@ -271,11 +274,11 @@ class AdhanNotificationService {
 
       // Fall back to Flutter notification only if native alarm fails or sound is disabled
       await _notifications.zonedSchedule(
-        id,
-        'Time for $prayerName Prayer',
-        'It\'s time to pray $prayerName',
-        scheduledTime,
-        NotificationDetails(
+        id: id,
+        title: 'Time for $prayerName Prayer',
+        body: 'It\'s time to pray $prayerName',
+        scheduledDate: scheduledTime,
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             _channelName,
@@ -315,8 +318,8 @@ class AdhanNotificationService {
           iOS: _darwinPrayerDetails(iosSound),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: '$prayerName|${nextPrayerTime.millisecondsSinceEpoch}',
-      );
+        payload: '$prayerName|${nextPrayerTime.millisecondsSinceEpoch}'
+            '${Platform.isIOS ? '|${_soundPayload(iosSound)}' : ''}');
       final localTime = scheduledTime.toLocal();
       final now = DateTime.now();
       final secondsUntil = scheduledTime.difference(now).inSeconds;
@@ -359,11 +362,11 @@ class AdhanNotificationService {
         : 'Time for night prayer (no adhan).';
 
     await _notifications.zonedSchedule(
-      910, // dedicated id for Tahajjud
+      id: 910, title: // dedicated id for Tahajjud
       title,
-      body,
-      scheduledTime,
-      NotificationDetails(
+      body: body,
+      scheduledDate: scheduledTime,
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,
@@ -383,8 +386,7 @@ class AdhanNotificationService {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: 'Tahajjud',
-    );
+      payload: 'Tahajjud');
   }
 
   /// Schedule repeating Suhoor reminders (adhan sound) from start window until Fajr.
@@ -420,11 +422,11 @@ class AdhanNotificationService {
     for (final time in reminders) {
       final scheduledTime = tz.TZDateTime.from(time, tz.local);
       await _notifications.zonedSchedule(
-        id,
-        'Suhoor reminder',
-        'Wrap up suhoor before Fajr.',
-        scheduledTime,
-        NotificationDetails(
+        id: id,
+        title: 'Suhoor reminder',
+        body: 'Wrap up suhoor before Fajr.',
+        scheduledDate: scheduledTime,
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             _channelName,
@@ -443,8 +445,7 @@ class AdhanNotificationService {
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'Suhoor',
-      );
+        payload: 'Suhoor');
       id++;
     }
   }
@@ -464,11 +465,11 @@ class AdhanNotificationService {
     debugPrint('🕐 Scheduling Iftar reminder at $scheduledTime');
 
     await _notifications.zonedSchedule(
-      940, // dedicated id for iftar alert
+      id: 940, title: // dedicated id for iftar alert
       'Iftar dua',
-      'Allahumma inni laka sumtu wa bika aamantu wa alayka tawakkaltu wa ala rizqika aftartu.',
-      scheduledTime,
-      NotificationDetails(
+      body: 'Allahumma inni laka sumtu wa bika aamantu wa alayka tawakkaltu wa ala rizqika aftartu.',
+      scheduledDate: scheduledTime,
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,
@@ -487,8 +488,7 @@ class AdhanNotificationService {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: 'Iftar',
-    );
+      payload: 'Iftar');
   }
 
   /// Single Suhoor dua reminder 5 minutes before Fajr.
@@ -505,11 +505,11 @@ class AdhanNotificationService {
     debugPrint('🕐 Scheduling Suhoor dua reminder at $scheduledTime');
 
     await _notifications.zonedSchedule(
-      941, // dedicated id for suhoor dua
+      id: 941, title: // dedicated id for suhoor dua
       'Suhoor dua',
-      'Wa bisawmi ghadin nawaitu min shahri Ramadan.',
-      scheduledTime,
-      NotificationDetails(
+      body: 'Wa bisawmi ghadin nawaitu min shahri Ramadan.',
+      scheduledDate: scheduledTime,
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,
@@ -528,8 +528,7 @@ class AdhanNotificationService {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: 'SuhoorDua',
-    );
+      payload: 'SuhoorDua');
   }
 
   /// Schedule Taraweeh reminder after Isha during Ramadan (silent).
@@ -548,11 +547,11 @@ class AdhanNotificationService {
     debugPrint('🕐 Scheduling Taraweeh reminder at $scheduledTime');
 
     await _notifications.zonedSchedule(
-      911, // dedicated id for Taraweeh
+      id: 911, title: // dedicated id for Taraweeh
       'Taraweeh time',
-      'Let\'s begin Taraweeh after Isha.',
-      scheduledTime,
-      NotificationDetails(
+      body: 'Let\'s begin Taraweeh after Isha.',
+      scheduledDate: scheduledTime,
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,
@@ -572,8 +571,7 @@ class AdhanNotificationService {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      payload: 'Taraweeh',
-    );
+      payload: 'Taraweeh');
   }
 
   /// Schedule a simple notification for Sunrise (no adhan sound)
@@ -593,11 +591,11 @@ class AdhanNotificationService {
 
     try {
       await _notifications.zonedSchedule(
-        id,
-        '🌅 Sunrise',
-        'The sun has risen. Have a blessed day!',
-        scheduledTime,
-        NotificationDetails(
+        id: id,
+        title: '🌅 Sunrise',
+        body: 'The sun has risen. Have a blessed day!',
+        scheduledDate: scheduledTime,
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             _channelName,
@@ -620,8 +618,7 @@ class AdhanNotificationService {
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: 'Sunrise',
-      );
+        payload: 'Sunrise');
       debugPrint('✅ Sunrise notification scheduled');
     } catch (e) {
       debugPrint('Error scheduling Sunrise notification: $e');
@@ -673,11 +670,11 @@ class AdhanNotificationService {
       final scheduledTime = tz.TZDateTime.from(snoozeTime, tz.local);
 
       await _notifications.zonedSchedule(
-        id + 1000, // Different ID for snoozed notification
+        id: id + 1000, title: // Different ID for snoozed notification
         'Last Call for $prayerName Prayer',
-        'Only 5 minutes left to pray $prayerName',
-        scheduledTime,
-        NotificationDetails(
+        body: 'Only 5 minutes left to pray $prayerName',
+        scheduledDate: scheduledTime,
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             _channelName,
@@ -706,8 +703,7 @@ class AdhanNotificationService {
           ),
         ),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: '$prayerName|${nextPrayerTime.millisecondsSinceEpoch}',
-      );
+        payload: '$prayerName|${nextPrayerTime.millisecondsSinceEpoch}');
       debugPrint('Snooze notification scheduled successfully for $scheduledTime');
     } catch (e) {
       debugPrint('Error scheduling snooze notification: $e');
@@ -722,10 +718,10 @@ class AdhanNotificationService {
     bool includeActions = false,
   }) async {
     await _notifications.show(
-      id,
-      title,
-      body,
-      NotificationDetails(
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _channelId,
           _channelName,
@@ -754,12 +750,11 @@ class AdhanNotificationService {
           presentSound: true,
         ),
       ),
-      payload: payload,
-    );
+      payload: payload);
   }
 
   Future<void> cancelNotification(int id) async {
-    await _notifications.cancel(id);
+    await _notifications.cancel(id: id);
   }
 
   Future<void> cancelAllNotifications() async {
@@ -896,7 +891,7 @@ class AdhanNotificationService {
       _soundService.stopAdhan();
       
       // Parse payload: prayerName|nextPrayerTime
-      if (parts != null && parts.length == 2 && prayerName != null) {
+      if (parts != null && parts.length >= 2 && prayerName != null) {
         final nextPrayerTime = DateTime.fromMillisecondsSinceEpoch(int.parse(parts[1]));
         
         debugPrint('Calling snoozeNotification for $prayerName');
@@ -914,7 +909,7 @@ class AdhanNotificationService {
       cancelNotification(response.id ?? 0);
     } else {
       // Notification body tapped or app opened from notification - launch adhan player screen
-      if (prayerName != null) {
+      if (prayerName != null && (parts == null || parts.length < 3 || parts[2] == 'adhan')) {
         debugPrint('📱 Launching adhan player screen for $prayerName (notification interaction)');
         _launchAdhanPlayerScreen(prayerName);
       }
@@ -997,7 +992,7 @@ class AdhanNotificationService {
 
       // The native alarm scheduler only exists on Android.
       if (!Platform.isAndroid) {
-        await _scheduleDarwinPrayerNotifications(lat, lng);
+        await rescheduleIosPrayerNotifications(latitude: lat, longitude: lng);
         return;
       }
 
@@ -1016,18 +1011,43 @@ class AdhanNotificationService {
     }
   }
 
+  Future<void> rescheduleIosPrayerNotifications({
+    required double latitude,
+    required double longitude,
+  }) async {
+    final pending = _darwinScheduleTail.then(
+      (_) => _scheduleDarwinPrayerNotifications(latitude, longitude),
+    );
+    _darwinScheduleTail = pending.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {
+        debugPrint('Error rescheduling iOS prayer notifications: $error');
+      },
+    );
+    await pending;
+  }
+
   /// Returns the bundled iOS notification sound (ios/Runner/*.caf, max 30s)
   /// for the user's selected adhan. Null means the default system sound,
   /// and an empty string means silent.
   Future<String?> _darwinAdhanSound(String prayerName) async {
-    // No Fajr clip is bundled for iOS, so Fajr uses the default tone.
-    if (prayerName == 'Fajr') return null;
     if (!await _soundService.getSoundEnabled(prayerName)) return '';
-    final adhan = (await _soundService.getSelectedAdhan()).toLowerCase();
-    if (adhan == 'silent') return '';
-    if (adhan.contains('rabeh')) return 'adhan_rabeh.caf';
-    if (adhan.contains('sharqawe')) return 'adhan_sharqawe.caf';
-    return null;
+    switch (await _soundService.getPrayerSoundMode(prayerName)) {
+      case PrayerSoundMode.defaultTone:
+        return null;
+      case PrayerSoundMode.silent:
+        return '';
+      case PrayerSoundMode.adhan:
+        final selected = await _soundService.getSelectedAdhan();
+        final adhan = selected == 'Silent'
+            ? AdhanSoundService.defaultNonFajrAdhan
+            : selected;
+        final clip = _soundService.darwinAdhanClip(adhan);
+        if (clip == null) {
+          throw StateError('No iOS notification sound for $adhan');
+        }
+        return clip;
+    }
   }
 
   DarwinNotificationDetails _darwinPrayerDetails(String? sound) => DarwinNotificationDetails(
@@ -1038,6 +1058,9 @@ class AdhanNotificationService {
         presentSound: sound != '',
         sound: (sound == null || sound.isEmpty) ? null : sound,
       );
+
+  String _soundPayload(String? sound) =>
+      sound == null ? 'defaultTone' : (sound.isEmpty ? 'silent' : 'adhan');
 
   static const int _darwinPrayerIdBase = 2000;
   static const int _darwinScheduleDays = 7;
@@ -1053,7 +1076,7 @@ class AdhanNotificationService {
 
     for (var day = 0; day < _darwinScheduleDays; day++) {
       for (var i = 0; i < _darwinPrayerNames.length; i++) {
-        await _notifications.cancel(_darwinPrayerIdBase + day * 10 + i);
+        await _notifications.cancel(id: _darwinPrayerIdBase + day * 10 + i);
       }
     }
 
@@ -1075,21 +1098,20 @@ class AdhanNotificationService {
 
     var scheduledCount = 0;
     var alarmCount = 0;
+    String? nextAlertLabel;
     for (var n = 0; n < upcoming.length - 1; n++) {
       final entry = upcoming[n];
       if (entry.day >= _darwinScheduleDays) break;
 
       final name = _darwinPrayerNames[entry.index];
-      // The Fajr row is hidden on iOS, so its saved toggles can't be changed there.
-      final userControlled = name != 'Fajr';
-      if (userControlled && !(prefs.getBool('prayer_enabled_$name') ?? true)) continue;
+      if (!(prefs.getBool('prayer_enabled_$name') ?? true)) continue;
 
       final days = prefs.getStringList('prayer_days_$name');
-      if (userControlled && days != null && days.length == 7 && days[entry.time.weekday % 7] != 'true') {
+      if (days != null && days.length == 7 && days[entry.time.weekday % 7] != 'true') {
         continue;
       }
 
-      final offset = userControlled ? (prefs.getInt('prayer_offset_$name') ?? 0) : 0;
+      final offset = prefs.getInt('prayer_offset_$name') ?? 0;
       final notifyAt = entry.time.subtract(Duration(minutes: offset));
       if (!notifyAt.isAfter(now)) continue;
 
@@ -1099,26 +1121,27 @@ class AdhanNotificationService {
           : 'It\'s time to pray $name';
       final sound = await _darwinAdhanSound(name);
 
-      // Fajr has no adhan clip on iOS, so it stays a regular notification.
-      if (useAlarms && name != 'Fajr' && sound != '' &&
+      if (useAlarms && sound != null && sound != '' &&
           await _scheduleIosAlarm(name, offset > 0 ? body : title, notifyAt, sound)) {
         alarmCount++;
+        nextAlertLabel ??= '$name (alarm) at $notifyAt';
         continue;
       }
 
       await _notifications.zonedSchedule(
-        _darwinPrayerIdBase + entry.day * 10 + entry.index,
-        title,
-        body,
-        tz.TZDateTime.from(notifyAt, tz.local),
-        NotificationDetails(iOS: _darwinPrayerDetails(sound)),
+        id: _darwinPrayerIdBase + entry.day * 10 + entry.index,
+        title: title,
+        body: body,
+        scheduledDate: tz.TZDateTime.from(notifyAt, tz.local),
+        notificationDetails: NotificationDetails(iOS: _darwinPrayerDetails(sound)),
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        payload: '$name|${upcoming[n + 1].time.millisecondsSinceEpoch}',
-      );
+        payload: '$name|${upcoming[n + 1].time.millisecondsSinceEpoch}|${_soundPayload(sound)}');
       scheduledCount++;
+      nextAlertLabel ??= '$name (notification) at $notifyAt';
     }
 
     debugPrint('✅ Scheduled $alarmCount iOS alarms and $scheduledCount iOS prayer notifications');
+    debugPrint('⏰ Next iOS prayer alert: ${nextAlertLabel ?? 'none scheduled'}');
     await debugPrintPendingNotifications();
   }
 }

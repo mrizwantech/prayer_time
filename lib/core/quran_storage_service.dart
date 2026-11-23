@@ -108,6 +108,7 @@ class QuranStorageService {
       'arabic': ayah.arabic,
       'translation': ayah.translation,
       'audioUrl': ayah.audioUrl,
+      'page': ayah.page,
     };
   }
 
@@ -117,6 +118,7 @@ class QuranStorageService {
       arabic: json['arabic'],
       translation: json['translation'] ?? '',
       audioUrl: json['audioUrl'],
+      page: json['page'] ?? 0,
     );
   }
 }

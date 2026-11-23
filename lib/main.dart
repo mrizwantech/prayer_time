@@ -84,7 +84,7 @@ void main() async {
     // Extract prayer name from payload
     if (payload != null && payload.isNotEmpty) {
       final parts = payload.split('|');
-      if (parts.isNotEmpty) {
+      if (parts.isNotEmpty && (parts.length < 3 || parts[2] == 'adhan')) {
         initialPrayerName = parts[0];
         debugPrint('🎯 Will auto-launch adhan player for: $initialPrayerName');
       }
@@ -459,6 +459,10 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int selectedIndex = 0;
+  // Nested navigator so pushed screens keep the bottom bar visible
+  final GlobalKey<NavigatorState> _tabNavigatorKey = GlobalKey<NavigatorState>();
+  final ValueNotifier<int> _tabIndex = ValueNotifier(0);
+
   final List<Widget> screens = const [
     HomeScreen(),
     QuranScreen(),
@@ -471,9 +475,17 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
-    selectedIndex = widget.initialIndex;
+    // Clamp so an out-of-range index can never crash the navigation
+    selectedIndex = widget.initialIndex.clamp(0, screens.length - 1);
+    _tabIndex.value = selectedIndex;
     // Request all permissions on app launch (don't await to avoid blocking UI)
     _requestAllPermissions();
+  }
+
+  @override
+  void dispose() {
+    _tabIndex.dispose();
+    super.dispose();
   }
 
   Future<void> _requestAllPermissions() async {
@@ -600,6 +612,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Future<void> _checkOverlayPermission() async {
+    if (!Platform.isAndroid) return; // Android-only native channel
     try {
       const platform = MethodChannel('com.mrizwantech.azanify/battery');
       final canDrawOverlays = await platform.invokeMethod('canDrawOverlays');
@@ -658,6 +671,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Future<void> _checkBatteryOptimization() async {
+    if (!Platform.isAndroid) return; // Android-only native channel
     try {
       const platform = MethodChannel('com.mrizwantech.azanify/battery');
       final isUnrestricted = await platform.invokeMethod(
@@ -740,6 +754,9 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   void onItemTapped(int index) {
+    // Pop any pushed sub-screens so the selected tab's root is visible
+    _tabNavigatorKey.currentState?.popUntil((route) => route.isFirst);
+    _tabIndex.value = index;
     setState(() {
       selectedIndex = index;
     });
@@ -750,9 +767,25 @@ class _MainNavigationState extends State<MainNavigation> {
     final theme = Theme.of(context);
 
     return WillPopScope(
-      onWillPop: () async => false, // disable back navigation
+      onWillPop: () async {
+        // Back pops sub-screens inside the tab navigator; block at root
+        final nav = _tabNavigatorKey.currentState;
+        if (nav != null && nav.canPop()) {
+          nav.pop();
+        }
+        return false;
+      },
       child: Scaffold(
-        body: screens[selectedIndex],
+        body: Navigator(
+          key: _tabNavigatorKey,
+          onGenerateRoute: (settings) => MaterialPageRoute(
+            settings: settings,
+            builder: (_) => ValueListenableBuilder<int>(
+              valueListenable: _tabIndex,
+              builder: (_, index, __) => screens[index],
+            ),
+          ),
+        ),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: selectedIndex,
           onTap: onItemTapped,

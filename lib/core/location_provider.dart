@@ -97,7 +97,7 @@ class LocationProvider extends ChangeNotifier {
 
   Future<void> _fetchCityState(double lat, double lng) async {
     try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
+      List<Placemark> placemarks = await Geocoding().placemarkFromCoordinates(lat, lng);
       debugPrint('🌍 Geocoding results: ${placemarks.length} placemarks found');
       if (placemarks.isNotEmpty) {
         final mark = placemarks.first;

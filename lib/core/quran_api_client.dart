@@ -30,12 +30,15 @@ class SurahAyah {
   final String arabic;
   final String translation;
   final String? audioUrl;
+  /// Page number in the standard 604-page Madani mushaf (0 = unknown).
+  final int page;
 
   const SurahAyah({
     required this.numberInSurah,
     required this.arabic,
     required this.translation,
     this.audioUrl,
+    this.page = 0,
   });
 }
 
@@ -46,12 +49,48 @@ class SurahDetail {
   const SurahDetail({required this.summary, required this.ayahs});
 }
 
+/// Timestamp window (ms) of one verse inside a continuous surah recording.
+class AyahTiming {
+  final int verse;
+  final int fromMs;
+  final int toMs;
+
+  const AyahTiming({
+    required this.verse,
+    required this.fromMs,
+    required this.toMs,
+  });
+}
+
+/// A continuous surah recording plus per-verse timestamps.
+class SurahAudioTimings {
+  final String audioUrl;
+  final List<AyahTiming> timings;
+
+  const SurahAudioTimings({required this.audioUrl, required this.timings});
+}
+
+/// A reciter offering gapless (continuous, timestamped) surah recordings.
+class GaplessReciter {
+  final int id;
+  final String name;
+  final String style;
+
+  const GaplessReciter({
+    required this.id,
+    required this.name,
+    required this.style,
+  });
+}
+
 class QuranApiClient {
   QuranApiClient({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
   List<SurahSummary>? _surahCache;
   final Map<int, SurahDetail> _detailCache = {};
+  final Map<int, SurahAudioTimings> _timingsCache = {};
+  List<GaplessReciter>? _gaplessRecitersCache;
   List<Reciter>? _recitersCache;
 
   static const String _base = 'https://api.alquran.cloud/v1';
@@ -145,6 +184,7 @@ class QuranApiClient {
           arabic: (ar['text'] as String?) ?? '',
           translation: (tr['text'] as String?) ?? '',
           audioUrl: au['audio'] as String?,
+          page: (ar['page'] as int?) ?? 0,
         ),
       );
     }
@@ -152,6 +192,88 @@ class QuranApiClient {
     final detail = SurahDetail(summary: summary, ayahs: ayahs);
     _detailCache[cacheKey] = detail;
     return detail;
+  }
+
+  /// Fetches the continuous (gapless) recording of a surah together with
+  /// per-verse timestamps for the given quran.com reciter id, enabling
+  /// smooth single-stream playback with follow-along highlighting.
+  Future<SurahAudioTimings> fetchSurahTimings(
+    int surahNumber, {
+    int reciterId = 7,
+  }) async {
+    final cacheKey = reciterId * 1000 + surahNumber;
+    final cached = _timingsCache[cacheKey];
+    if (cached != null) return cached;
+
+    final uri = Uri.parse(
+      'https://api.qurancdn.com/api/qdc/audio/reciters/$reciterId/audio_files'
+      '?chapter=$surahNumber&segments=true',
+    );
+    final resp = await _client.get(uri);
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to load timings (${resp.statusCode})');
+    }
+    final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+    final files = decoded['audio_files'] as List<dynamic>? ?? <dynamic>[];
+    if (files.isEmpty) {
+      throw Exception('No audio timing data for surah $surahNumber');
+    }
+    final file = files.first as Map<String, dynamic>;
+    var audioUrl = (file['audio_url'] as String?) ?? '';
+    if (audioUrl.isEmpty) {
+      throw Exception('No audio URL in timing data');
+    }
+    if (!audioUrl.startsWith('http')) {
+      audioUrl = 'https://download.quranicaudio.com/$audioUrl';
+    }
+    final verseTimings = file['verse_timings'] as List<dynamic>? ?? <dynamic>[];
+    final timings = <AyahTiming>[];
+    for (final vt in verseTimings) {
+      final map = vt as Map<String, dynamic>;
+      final key = map['verse_key'] as String?;
+      final from = map['timestamp_from'] as num?;
+      final to = map['timestamp_to'] as num?;
+      if (key == null || from == null || to == null) continue;
+      timings.add(AyahTiming(
+        verse: int.parse(key.split(':').last),
+        fromMs: from.toInt(),
+        toMs: to.toInt(),
+      ));
+    }
+    timings.sort((a, b) => a.fromMs.compareTo(b.fromMs));
+    final result = SurahAudioTimings(audioUrl: audioUrl, timings: timings);
+    _timingsCache[reciterId * 1000 + surahNumber] = result;
+    return result;
+  }
+
+  /// Reciters with gapless (continuous, timestamped) surah recordings.
+  Future<List<GaplessReciter>> fetchGaplessReciters() async {
+    if (_gaplessRecitersCache != null) return _gaplessRecitersCache!;
+    final uri =
+        Uri.parse('https://api.qurancdn.com/api/qdc/audio/reciters?locale=en');
+    final resp = await _client.get(uri);
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to load reciters (${resp.statusCode})');
+    }
+    final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+    final list = decoded['reciters'] as List<dynamic>? ?? <dynamic>[];
+    final reciters = <GaplessReciter>[];
+    for (final item in list) {
+      final map = item as Map<String, dynamic>;
+      final id = map['id'] as int?;
+      final name = (map['translated_name'] as Map<String, dynamic>?)?['name']
+              as String? ??
+          map['name'] as String? ??
+          '';
+      final style =
+          (map['style'] as Map<String, dynamic>?)?['name'] as String? ?? '';
+      if (id == null || name.isEmpty) continue;
+      reciters.add(GaplessReciter(id: id, name: name, style: style));
+    }
+    reciters.sort((a, b) => a.name.compareTo(b.name));
+    if (reciters.isEmpty) throw Exception('No reciters available');
+    _gaplessRecitersCache = reciters;
+    return reciters;
   }
 
   Future<List<Reciter>> fetchReciters() async {

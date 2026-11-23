@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../presentation/widgets/home_background.dart';
 import '../salah_pose_setup/salah_pose_setup_screen.dart';
 
 enum _RakatTrackingMode { manual, automatic }
@@ -197,7 +198,6 @@ class _RakahCounterScreenState extends State<RakahCounterScreen>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final backgroundColor = theme.scaffoldBackgroundColor;
     final cardColor = theme.cardColor;
     final textColor = theme.colorScheme.onSurface;
     final subtitleColor =
@@ -207,7 +207,6 @@ class _RakahCounterScreenState extends State<RakahCounterScreen>
     final bottomPadding = MediaQuery.of(context).padding.bottom + 24;
 
     return Scaffold(
-      backgroundColor: backgroundColor,
       appBar: AppBar(
         title: const Text('Rakat Counter'),
         backgroundColor: primaryColor,
@@ -224,23 +223,28 @@ class _RakahCounterScreenState extends State<RakahCounterScreen>
           },
         ),
       ),
-      body: SafeArea(
-        child: _selectedPrayerName == null
-            ? _buildPrayerSelection(
-                cardColor,
-                textColor,
-                subtitleColor,
-                primaryColor,
-                bottomPadding,
-              )
-            : _buildCounterView(
-                cardColor,
-                textColor,
-                subtitleColor,
-                primaryColor,
-                isDark,
-                bottomPadding,
-              ),
+      body: HomeBackground(
+        child: SafeArea(
+          child: Material(
+            color: theme.colorScheme.surface.withOpacity(0.75),
+            child: _selectedPrayerName == null
+                ? _buildPrayerSelection(
+                    cardColor,
+                    textColor,
+                    subtitleColor,
+                    primaryColor,
+                    bottomPadding,
+                  )
+                : _buildCounterView(
+                    cardColor,
+                    textColor,
+                    subtitleColor,
+                    primaryColor,
+                    isDark,
+                    bottomPadding,
+                  ),
+          ),
+        ),
       ),
     );
   }

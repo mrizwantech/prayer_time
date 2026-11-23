@@ -196,18 +196,9 @@ class _SplashScreenState extends State<SplashScreen>
               height: 130,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(30),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF4FC3F7),
-                    Color(0xFF1E88E5),
-                    Color(0xFF1565C0),
-                  ],
-                ),
                 boxShadow: const [
                   BoxShadow(
-                    color: Color.fromRGBO(79, 195, 247, 0.4),
+                    color: Color.fromRGBO(0, 217, 165, 0.25),
                     blurRadius: 20,
                     offset: Offset(0, 8),
                   ),
@@ -216,7 +207,7 @@ class _SplashScreenState extends State<SplashScreen>
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(30),
                 child: Image.asset(
-                  'assets/images/logoprayer.png',
+                  'assets/images/app_icon.png',
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     return const Icon(Icons.mosque, size: 70, color: Colors.white);

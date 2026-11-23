@@ -27,6 +27,7 @@ class PrayerTimeService extends ChangeNotifier {
   // State
   bool _isLoading = false;
   String? _error;
+  bool _locationUnavailable = false;
   DateTime? _lastFetchDate;
   DateTime? _lastScheduledDate;
   
@@ -42,6 +43,7 @@ class PrayerTimeService extends ChangeNotifier {
   double? get longitude => _longitude;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get locationUnavailable => _locationUnavailable;
   bool get hasLocation => _latitude != null && _longitude != null;
   bool get hasPrayerTimes => _prayerTimes != null;
   
@@ -105,18 +107,27 @@ class PrayerTimeService extends ChangeNotifier {
   
   /// Full initialization - get location, prayer times, and schedule notifications
   Future<void> initialize() async {
+    if (_isLoading) return;
     debugPrint('🕌 PrayerTimeService: Initializing...');
     _isLoading = true;
     _error = null;
+    _locationUnavailable = false;
     notifyListeners();
+    var fetchingLocation = true;
     
     try {
       // Step 1: Get location
-      await _fetchLocation();
-      
-      if (_latitude == null || _longitude == null) {
-        throw Exception('Could not get location');
-      }
+      final location = await _fetchLocation().timeout(
+        const Duration(seconds: 15),
+      );
+      fetchingLocation = false;
+      _latitude = location.latitude;
+      _longitude = location.longitude;
+      await _saveLocationToPrefs().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => debugPrint('Saving location timed out'),
+      );
+      _fetchCityState();
       
       // Step 2: Calculate prayer times
       await _calculatePrayerTimes();
@@ -132,6 +143,7 @@ class PrayerTimeService extends ChangeNotifier {
     } catch (e) {
       debugPrint('❌ PrayerTimeService: Error during initialization: $e');
       _error = e.toString();
+      _locationUnavailable = fetchingLocation;
       _isLoading = false;
       notifyListeners();
     }
@@ -156,7 +168,7 @@ class PrayerTimeService extends ChangeNotifier {
     _currentCalculationMethod = _calculationMethodSettings?.selectedMethod?.name;
   }
   
-  Future<void> _fetchLocation() async {
+  Future<({double latitude, double longitude})> _fetchLocation() async {
     debugPrint('📍 PrayerTimeService: Fetching location...');
 
     // Ensure location services are on (emulators sometimes have them off)
@@ -184,38 +196,26 @@ class PrayerTimeService extends ChangeNotifier {
     }
     
     // Try last known position first for instant load
-    Position? position = await Geolocator.getLastKnownPosition();
+    Position? position = await Geolocator.getLastKnownPosition().timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => null,
+    );
     debugPrint('📍 Last known: ${position?.latitude}, ${position?.longitude}');
 
-    // If no last known, try fresh lookup with generous timeout (emulators can be slow)
+    // If no last known, try a fresh lookup before falling back to stored coordinates.
     if (position == null) {
       try {
-        debugPrint('📍 Getting current position (attempt 1)...');
+        debugPrint('📍 Getting current position...');
         position = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.low,
-            timeLimit: Duration(seconds: 20),
+            timeLimit: Duration(seconds: 8),
           ),
-        );
+        ).timeout(const Duration(seconds: 8));
       } on TimeoutException catch (_) {
-        debugPrint('⏳ Location request timed out (attempt 1)');
+        debugPrint('⏳ Location request timed out');
       } catch (e) {
         debugPrint('❌ Error getting current position: $e');
-      }
-    }
-
-    // Second attempt with longer time limit if still null
-    if (position == null) {
-      try {
-        debugPrint('📍 Getting current position (attempt 2)...');
-        position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.low,
-            timeLimit: Duration(seconds: 30),
-          ),
-        );
-      } catch (e) {
-        debugPrint('❌ Error getting current position (attempt 2): $e');
       }
     }
 
@@ -223,25 +223,15 @@ class PrayerTimeService extends ChangeNotifier {
     if (position == null) {
       final stored = await _loadLocationFromPrefs();
       if (stored != null) {
-        _latitude = stored['lat'];
-        _longitude = stored['lng'];
-        debugPrint('📍 Using stored location: $_latitude, $_longitude');
-        _fetchCityState();
-        return;
+        debugPrint('📍 Using stored location: ${stored['lat']}, ${stored['lng']}');
+        return (latitude: stored['lat']!, longitude: stored['lng']!);
       }
 
       throw Exception('Could not get location. On emulator, set a GPS location in Extended Controls or allow location in settings.');
     }
 
-    _latitude = position.latitude;
-    _longitude = position.longitude;
-    debugPrint('📍 Got location: $_latitude, $_longitude');
-
-    // Save location to SharedPreferences for native rescheduling
-    await _saveLocationToPrefs();
-
-    // Fetch city/state in background (don't block)
-    _fetchCityState();
+    debugPrint('📍 Got location: ${position.latitude}, ${position.longitude}');
+    return (latitude: position.latitude, longitude: position.longitude);
   }
 
   Future<Map<String, double>?> _loadLocationFromPrefs() async {
@@ -276,7 +266,7 @@ class PrayerTimeService extends ChangeNotifier {
     if (_latitude == null || _longitude == null) return;
     
     try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(_latitude!, _longitude!);
+      List<Placemark> placemarks = await Geocoding().placemarkFromCoordinates(_latitude!, _longitude!);
       if (placemarks.isNotEmpty) {
         final mark = placemarks.first;
         _city = mark.locality ?? mark.subAdministrativeArea;

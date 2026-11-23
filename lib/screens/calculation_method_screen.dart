@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../core/calculation_method_settings.dart';
 import '../presentation/widgets/app_header.dart';
 import '../core/prayer_time_service.dart';
-import '../main.dart';
 
 class CalculationMethodScreen extends StatefulWidget {
   final bool isFirstTime;
@@ -219,27 +218,7 @@ class _CalculationMethodScreenState extends State<CalculationMethodScreen> {
             ],
           ),
         ),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: 6, // keep Settings highlighted
-          onTap: (idx) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => MainNavigation(initialIndex: idx)),
-            );
-          },
-          selectedItemColor: Theme.of(context).colorScheme.primary,
-          unselectedItemColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Quran'),
-            BottomNavigationBarItem(icon: Icon(Icons.radio_button_checked), label: 'Tasbeeh'),
-            BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Qibla'),
-            BottomNavigationBarItem(icon: Icon(Icons.track_changes), label: 'Rakat'),
-            BottomNavigationBarItem(icon: Icon(Icons.brush), label: 'Posts'),
-            BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
-          ],
-        ),
+        bottomNavigationBar: null,
       ),
     );
   }

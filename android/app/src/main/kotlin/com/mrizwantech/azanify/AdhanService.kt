@@ -19,8 +19,8 @@ class AdhanService : Service() {
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private var originalVolume: Int = -1
     private var appVolume: Float = 1.0f
+    private var isPreview = false
     private val CHANNEL_ID = "adhan_alert_channel_v2" // New channel ID for high priority
     private val NOTIFICATION_ID = 9999
 
@@ -28,6 +28,7 @@ class AdhanService : Service() {
         private const val TAG = "AdhanService"
         const val ACTION_PLAY = "PLAY_ADHAN"
         const val ACTION_STOP = "STOP_ADHAN"
+        const val ACTION_STOP_PREVIEW = "STOP_PREVIEW"
         const val ACTION_PAUSE = "PAUSE_ADHAN"
         const val ACTION_RESUME = "RESUME_ADHAN"
         const val EXTRA_PRAYER_NAME = "PRAYER_NAME"
@@ -82,6 +83,10 @@ class AdhanService : Service() {
                 Log.d(TAG, "ACTION_STOP received, calling stopAdhan()")
                 stopAdhan()
             }
+            ACTION_STOP_PREVIEW -> {
+                if (isPreview) stopAdhan()
+                else if (mediaPlayer == null) stopSelf()
+            }
             ACTION_PAUSE -> {
                 Log.d(TAG, "ACTION_PAUSE received")
                 pauseAdhan()
@@ -128,11 +133,13 @@ class AdhanService : Service() {
             Log.d(TAG, "🎵 playAdhan() called: prayerName=$prayerName, soundFile=$soundFile, localFilePath=$localFilePath, volume=$volume")
             
             // Store app volume for use in MediaPlayer
-            appVolume = volume
+            appVolume = volume.coerceIn(0f, 1f)
+            isPreview = prayerName == "Preview"
             
             // CRITICAL: Start foreground IMMEDIATELY to avoid ForegroundServiceDidNotStartInTimeException
             // This MUST be called within 5 seconds of startForegroundService()
-            val notification = createNotificationWithFullScreenIntent(prayerName)
+            val notification = if (isPreview) createNotification(prayerName, true)
+                else createNotificationWithFullScreenIntent(prayerName)
             startForeground(NOTIFICATION_ID, notification)
             Log.d(TAG, "📱 Foreground notification shown (early)")
             
@@ -151,20 +158,12 @@ class AdhanService : Service() {
             // Request audio focus
             requestAudioFocus()
             
-            // Save original device volume and set to max for independent control
-            audioManager?.let { am ->
-                originalVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC)
-                val maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                am.setStreamVolume(AudioManager.STREAM_MUSIC, maxVolume, 0)
-                Log.d(TAG, "📢 Saved original volume: $originalVolume, set to max: $maxVolume")
-            }
-
             // Create media player with proper audio attributes for media playback
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build()
                 )
                 
@@ -200,9 +199,8 @@ class AdhanService : Service() {
                 }
                 
                 prepare()
-                // Set app-controlled volume (device volume is at max, this controls actual output)
                 setVolume(appVolume, appVolume)
-                Log.d(TAG, "📢 MediaPlayer volume set to $appVolume (device at max)")
+                Log.d(TAG, "📢 MediaPlayer volume set to $appVolume")
                 setOnCompletionListener {
                     Log.d(TAG, "Adhan playback completed")
                     stopAdhan()
@@ -213,7 +211,7 @@ class AdhanService : Service() {
             Log.d(TAG, "🎵 MediaPlayer started successfully")
             
             // Launch the activity - need overlay permission on Android 10+
-            launchMainActivity(prayerName)
+            if (!isPreview) launchMainActivity(prayerName)
 
         } catch (e: Exception) {
             Log.e(TAG, "Error playing adhan: ${e.message}")
@@ -424,13 +422,6 @@ class AdhanService : Service() {
                 Log.d(TAG, "MediaPlayer released")
             } ?: Log.d(TAG, "MediaPlayer is null, nothing to stop")
             mediaPlayer = null
-            
-            // Restore original device volume
-            if (originalVolume >= 0) {
-                audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume, 0)
-                Log.d(TAG, "📢 Restored original volume: $originalVolume")
-                originalVolume = -1
-            }
             
             abandonAudioFocus()
             releaseWakeLock()

@@ -10,6 +10,18 @@ Replace both with your iOS AdMob app and rewarded ad unit IDs before release.
 The app ID is required at startup; omitting it causes the Google Mobile Ads SDK
 to terminate the app.
 
+## Prayer notification sounds
+
+In Adhan & Sound, choose Default tone, Adhan, or Silent for each prayer.
+Silent still displays a notification. Android uses its dedicated Fajr adhan;
+other adhan alerts use the selected recording. The Android adhan volume slider
+scales playback relative to the device's media volume. Default notification
+tones use the device's notification volume.
+
+On iOS, adhan alerts use the selected bundled short clip, including for Fajr.
+iOS controls scheduled notification and alarm volume using device settings;
+the app cannot set a separate volume for those alerts.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

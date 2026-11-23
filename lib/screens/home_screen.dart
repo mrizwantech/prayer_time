@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/prayer_time_service.dart';
 import '../presentation/widgets/prayer_timeline.dart';
 import '../presentation/widgets/app_header.dart';
+import '../presentation/widgets/home_background.dart';
 import '../core/prayer_theme_provider.dart';
 import '../core/quran_api_client.dart';
 import 'quran_surah_screen.dart';
@@ -423,8 +424,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Consumer<PrayerTimeService>(
       builder: (context, prayerService, child) {
         final themeProvider = Provider.of<PrayerThemeProvider>(context);
-        final currentPrayer = prayerService.getCurrentPrayerName();
-        final theme = themeProvider.getCurrentTheme(currentPrayer);
         final isRamadan = themeProvider.isRamadan;
         final hijri = HijriDate.now();
         final bannerDay = hijri.hDay;
@@ -433,14 +432,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         final nextPrayer = _nextPrayerInfo(prayerService);
         final currentNext = _currentAndNext(prayerService);
 
-        return Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: theme.backgroundGradient,
-            ),
-          ),
+        return HomeBackground(
           child: SafeArea(
             child: Column(
               children: [
@@ -453,7 +445,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   showLocation: true,
                   showSupport: true,
                   onSupport: _onSupportPressed,
+                  overlayStyle: true,
                 ),
+
+                if (prayerService.locationUnavailable &&
+                    !prayerService.isLoading &&
+                    prayerService.hasPrayerTimes)
+                  ListTile(
+                    leading: const Icon(Icons.location_off, color: Colors.white),
+                    title: const Text(
+                      "Couldn't update your location. Showing previous prayer times.",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    trailing: TextButton(
+                      onPressed: prayerService.refresh,
+                      child: const Text('Try again'),
+                    ),
+                  ),
 
                 if (isRamadan && !_bannerDismissed)
                   Padding(
@@ -688,11 +696,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final moonIllumination = (moonPhase.illumination * 100).toStringAsFixed(0);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.18),
+        color: Colors.black.withOpacity(0.38),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.18)),
+        border: Border.all(color: Colors.white.withOpacity(0.25)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -703,15 +711,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             children: [
               Icon(
                 _getMoonIcon(moonPhaseName),
-                color: Colors.amber.shade200,
+                color: Colors.amber.shade300,
                 size: 18,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 5),
               Text(
                 '$moonIllumination%',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.8),
-                  fontSize: 13,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -719,7 +728,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           Container(
             width: 1,
             height: 16,
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withOpacity(0.4),
           ),
           // Sunrise
           if (prayerService.sunrise != null)
@@ -728,15 +737,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               children: [
                 Icon(
                   Icons.wb_sunny_outlined,
-                  color: Colors.orange.withOpacity(0.9),
-                  size: 16,
+                  color: Colors.orange.shade300,
+                  size: 17,
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 5),
                 Text(
                   DateFormat('h:mm a').format(prayerService.sunrise!),
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.85),
-                    fontSize: 13,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -744,7 +754,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           Container(
             width: 1,
             height: 16,
-            color: Colors.white.withOpacity(0.3),
+            color: Colors.white.withOpacity(0.4),
           ),
           // Sunset
           if (prayerService.sunset != null)
@@ -753,15 +763,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               children: [
                 Icon(
                   Icons.wb_twilight,
-                  color: Colors.deepOrange.withOpacity(0.9),
-                  size: 16,
+                  color: Colors.deepOrange.shade300,
+                  size: 17,
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 5),
                 Text(
                   DateFormat('h:mm a').format(prayerService.sunset!),
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.85),
-                    fontSize: 13,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
