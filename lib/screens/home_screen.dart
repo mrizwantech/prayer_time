@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:provider/provider.dart';
 import '../core/prayer_time_service.dart';
+import '../core/ad_consent_service.dart';
 import '../presentation/widgets/prayer_timeline.dart';
 import '../presentation/widgets/app_header.dart';
 import '../presentation/widgets/home_background.dart';
@@ -27,6 +30,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _bannerDismissed = false;
   RewardedAd? _rewardedAd;
   bool _isRewardedLoading = false;
+  int _adLoadGeneration = 0;
+  AdConsentService? _adConsent;
   SurahSummary? _lastReadSurah;
   int? _lastReadAyah;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
@@ -38,6 +43,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _loadBannerState();
     _loadLastReadQuran();
     _startCountdownTimer();
+    _adConsent = context.read<AdConsentService?>();
+    _adConsent?.addListener(_onAdConsentChanged);
     _loadRewardedAd();
   }
 
@@ -67,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _adConsent?.removeListener(_onAdConsentChanged);
     _countdownTimer?.cancel();
     _rewardedAd?.dispose();
     super.dispose();
@@ -123,67 +131,97 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  // Set to true to use Google test ads (for debugging decoder issues)
-  static const bool _useTestAds = false;
-
   String get _rewardedUnitId {
-    if (_useTestAds) {
-      // Google test rewarded ad (always works, no decoder issues)
-      return 'ca-app-pub-3940256099942544/5224354917';
+    if (!kReleaseMode) {
+      return Platform.isIOS
+          ? 'ca-app-pub-3940256099942544/1712485313'
+          : 'ca-app-pub-3940256099942544/5224354917';
     }
-    // Real ad unit IDs
     return Platform.isIOS
-        ? 'ca-app-pub-3940256099942544/1712485313' // TODO: Add iOS rewarded ad unit ID
+        ? 'ca-app-pub-5118580699569063/8243999590'
         : 'ca-app-pub-5118580699569063/7195644830';
   }
 
-  void _loadRewardedAd() {
-    if (_isRewardedLoading || _rewardedAd != null || !mounted) return;
+  void _onAdConsentChanged() {
+    if (_adConsent?.canRequestAds == true) {
+      _loadRewardedAd();
+      return;
+    }
+    _adLoadGeneration++;
+    _isRewardedLoading = false;
+    _rewardedAd?.dispose();
+    _rewardedAd = null;
+  }
+
+  Future<void> _loadRewardedAd() async {
+    if (!mounted ||
+        _adConsent?.canRequestAds != true ||
+        _isRewardedLoading ||
+        _rewardedAd != null) {
+      return;
+    }
     _isRewardedLoading = true;
+    final generation = _adLoadGeneration;
     debugPrint('📺 Loading rewarded ad...');
 
-    RewardedAd.load(
-      adUnitId: _rewardedUnitId,
-      request: const AdRequest(),
-      rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (ad) {
-          if (!mounted) {
-            ad.dispose();
-            return;
-          }
-          debugPrint('✅ Rewarded ad loaded successfully');
-          _rewardedAd = ad;
-          _isRewardedLoading = false;
-          _rewardedAd?.fullScreenContentCallback = FullScreenContentCallback(
-            onAdDismissedFullScreenContent: (ad) {
+    try {
+      await RewardedAd.load(
+        adUnitId: _rewardedUnitId,
+        request: const AdRequest(),
+        rewardedAdLoadCallback: RewardedAdLoadCallback(
+          onAdLoaded: (ad) {
+            if (!mounted || generation != _adLoadGeneration) {
               ad.dispose();
-              _rewardedAd = null;
-              _loadRewardedAd();
-            },
-            onAdFailedToShowFullScreenContent: (ad, error) {
-              debugPrint('❌ Ad failed to show: $error');
-              ad.dispose();
-              _rewardedAd = null;
-              _loadRewardedAd();
-            },
-          );
-          setState(() {});
-        },
-        onAdFailedToLoad: (error) {
-          debugPrint('❌ Rewarded ad failed to load: ${error.code} - ${error.message}');
-          _isRewardedLoading = false;
-          _rewardedAd = null;
-          // Retry after delay - longer delay for repeated failures
-          final retryDelay = error.code == 0 ? 60 : 30; // Internal error = longer wait
-          Future.delayed(Duration(seconds: retryDelay), () {
-            if (mounted) _loadRewardedAd();
-          });
-        },
-      ),
-    );
+              return;
+            }
+            debugPrint('✅ Rewarded ad loaded successfully');
+            _rewardedAd = ad;
+            _isRewardedLoading = false;
+            ad.fullScreenContentCallback = FullScreenContentCallback(
+              onAdDismissedFullScreenContent: (ad) {
+                ad.dispose();
+                if (identical(_rewardedAd, ad)) _rewardedAd = null;
+                _loadRewardedAd();
+              },
+              onAdFailedToShowFullScreenContent: (ad, error) {
+                debugPrint('❌ Ad failed to show: $error');
+                ad.dispose();
+                if (identical(_rewardedAd, ad)) _rewardedAd = null;
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Could not show the ad. Please try again.'),
+                    ),
+                  );
+                }
+                _loadRewardedAd();
+              },
+            );
+            setState(() {});
+          },
+          onAdFailedToLoad: (error) {
+            if (!mounted || generation != _adLoadGeneration) return;
+            debugPrint('❌ Rewarded ad failed to load: ${error.code} - ${error.message}');
+            _isRewardedLoading = false;
+            _rewardedAd = null;
+            final retryDelay = error.code == 0 ? 60 : 30;
+            Future.delayed(Duration(seconds: retryDelay), () {
+              if (mounted && generation == _adLoadGeneration) _loadRewardedAd();
+            });
+          },
+        ),
+      );
+    } on PlatformException catch (error) {
+      if (generation == _adLoadGeneration) _isRewardedLoading = false;
+      debugPrint('Unable to request rewarded ad: $error');
+    }
   }
 
   void _showSupportAd() {
+    if (_adConsent?.canRequestAds != true) {
+      _showAdUnavailable();
+      return;
+    }
     // Check if app is in foreground - AdMob requires this
     if (!_isAppInForeground) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -195,8 +233,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (_rewardedAd != null) {
       _rewardedAd!.show(
         onUserEarnedReward: (_, reward) {
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Thanks for your support! (${reward.amount} ${reward.type})')),
+            const SnackBar(content: Text('Dua Generator unlocked.')),
           );
           _handleDuaFlow();
         },
@@ -222,12 +261,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
 
   Future<void> _onSupportPressed() async {
+    if (_adConsent?.canRequestAds != true) {
+      _showAdUnavailable();
+      return;
+    }
     final confirm = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Support us'),
+            title: const Text('Open Dua Generator'),
             content: const Text(
-              'Watch a short ad to support us in building more helpful features?',
+              'Watch a short ad to open the Dua Generator?',
             ),
             actions: [
               TextButton(
@@ -245,6 +288,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     if (!confirm || !mounted) return;
     _showSupportAd();
+  }
+
+  void _showAdUnavailable() {
+    final checking = _adConsent?.busy == true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          checking
+              ? 'Checking ad privacy choices. Please try again shortly.'
+              : 'Rewarded ads are currently unavailable.',
+        ),
+      ),
+    );
   }
 
   Map<String, dynamic>? _countdownTarget(PrayerTimeService service) {

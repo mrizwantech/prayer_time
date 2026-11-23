@@ -2,13 +2,18 @@
 
 A new Flutter project.
 
-## iOS advertising setup
+## AdMob release setup
 
-The iOS app uses Google's sample AdMob app ID in `ios/Runner/Info.plist`
-and a test rewarded ad unit in `lib/screens/home_screen.dart`.
-Replace both with your iOS AdMob app and rewarded ad unit IDs before release.
-The app ID is required at startup; omitting it causes the Google Mobile Ads SDK
-to terminate the app.
+Publish the applicable consent messages for both Azanify app entries in
+**AdMob → Privacy & messaging** (including the European regulations message
+if serving ads in the EEA, UK, or Switzerland). Add the app's privacy-policy
+URL in AdMob when configuring the message. The app checks Google UMP at
+startup before requesting ads. **Settings → Ad privacy choices** appears
+when UMP requires it.
+
+Debug and profile builds use Google's rewarded test ad units. Before release,
+test a fresh install with UMP's test geography and confirm that the form works,
+the ad is opt-in, and users can reopen the form from Settings when required.
 
 ## Prayer notification sounds
 

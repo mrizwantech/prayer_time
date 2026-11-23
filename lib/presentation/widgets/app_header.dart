@@ -179,13 +179,13 @@ class AppHeader extends StatelessWidget {
               ),
               child: IconButton(
                 icon: Icon(
-                  Icons.favorite_outline,
+                  Icons.auto_awesome_outlined,
                   color: accentColor,
                 ),
                 onPressed: onSupport,
                 padding: const EdgeInsets.all(8),
                 constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                tooltip: 'Donate',
+                tooltip: 'Dua Generator',
               ),
             ),
           ],

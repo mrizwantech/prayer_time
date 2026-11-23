@@ -5,7 +5,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'screens/home_screen.dart';
@@ -25,6 +24,7 @@ import 'core/permission_manager.dart';
 import 'core/prayer_time_service.dart';
 import 'core/app_theme_settings.dart';
 import 'core/prayer_font_settings.dart';
+import 'core/ad_consent_service.dart';
 import 'core/prayer_theme_provider.dart';
 import 'core/ramadan_reminder_settings.dart';
 import 'core/quran_provider.dart';
@@ -55,9 +55,6 @@ void main() async {
 
   // Initialize timezone database for notifications
   tz.initializeTimeZones();
-
-  // Initialize Google Mobile Ads early for rewarded support ad
-  await MobileAds.instance.initialize();
 
   // Initialize notification service and check for notification launch
   final notificationService = AdhanNotificationService();
@@ -126,6 +123,7 @@ void main() async {
         providers: [
           ChangeNotifierProvider(create: (_) => TimeFormatSettings()),
           ChangeNotifierProvider(create: (_) => PrayerFontSettings()),
+          ChangeNotifierProvider(create: (_) => AdConsentService()),
           ChangeNotifierProvider.value(value: calculationMethodSettings),
           ChangeNotifierProvider.value(value: prayerTimeService),
           ChangeNotifierProvider.value(value: appThemeSettings),
@@ -457,8 +455,10 @@ class MainNavigation extends StatefulWidget {
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _MainNavigationState extends State<MainNavigation> {
+class _MainNavigationState extends State<MainNavigation>
+    with WidgetsBindingObserver {
   int selectedIndex = 0;
+  bool _permissionPromptsFinished = false;
   // Nested navigator so pushed screens keep the bottom bar visible
   final GlobalKey<NavigatorState> _tabNavigatorKey = GlobalKey<NavigatorState>();
   final ValueNotifier<int> _tabIndex = ValueNotifier(0);
@@ -475,15 +475,34 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Clamp so an out-of-range index can never crash the navigation
     selectedIndex = widget.initialIndex.clamp(0, screens.length - 1);
     _tabIndex.value = selectedIndex;
-    // Request all permissions on app launch (don't await to avoid blocking UI)
-    _requestAllPermissions();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _requestAllPermissions();
+      if (!mounted) return;
+      _permissionPromptsFinished = true;
+      _startAdConsentWhenResumed();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _startAdConsentWhenResumed();
+  }
+
+  void _startAdConsentWhenResumed() {
+    if (_permissionPromptsFinished &&
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      context.read<AdConsentService?>()?.start();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabIndex.dispose();
     super.dispose();
   }
@@ -513,13 +532,13 @@ class _MainNavigationState extends State<MainNavigation> {
 
         // Then show battery optimization prompt
         if (mounted) {
-          _checkBatteryOptimization();
+          await _checkBatteryOptimization();
         }
       } else {
         debugPrint('Some permissions were not granted');
         // Show alert explaining why permissions are needed
         if (mounted) {
-          showDialog(
+          final retry = await showDialog<bool>(
             context: context,
             barrierDismissible: true, // Allow dismissing by tapping outside
             builder: (context) => AlertDialog(
@@ -575,16 +594,7 @@ class _MainNavigationState extends State<MainNavigation> {
                   child: Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    // iOS only shows each permission prompt once, so after a
-                    // denial the user has to enable it in the Settings app.
-                    if (Platform.isIOS) {
-                      await Geolocator.openAppSettings();
-                      return;
-                    }
-                    await _requestAllPermissions(); // Try again
-                  },
+                  onPressed: () => Navigator.pop(context, true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
                     foregroundColor: Colors.white,
@@ -594,6 +604,13 @@ class _MainNavigationState extends State<MainNavigation> {
               ],
             ),
           );
+          if (retry == true && mounted) {
+            if (Platform.isIOS) {
+              await Geolocator.openAppSettings();
+            } else {
+              await _requestAllPermissions();
+            }
+          }
         }
       }
     } catch (e, stackTrace) {
@@ -679,46 +696,44 @@ class _MainNavigationState extends State<MainNavigation> {
       );
 
       if (!isUnrestricted && mounted) {
-        // Show dialog asking user to disable battery optimization
-        Future.delayed(Duration(seconds: 1), () {
-          if (!mounted) return;
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.battery_alert, color: Colors.orange),
-                  SizedBox(width: 8),
-                  Text('Important!'),
-                ],
-              ),
-              content: Text(
-                'To receive prayer notifications reliably, please disable battery optimization for this app.\n\n'
-                'This ensures notifications work even when your phone is in sleep mode.',
-                style: TextStyle(fontSize: 15),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('Later'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    await platform.invokeMethod(
-                      'requestIgnoreBatteryOptimizations',
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text('Allow'),
-                ),
+        await Future<void>.delayed(const Duration(seconds: 1));
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.battery_alert, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Important!'),
               ],
             ),
-          );
-        });
+            content: Text(
+              'To receive prayer notifications reliably, please disable battery optimization for this app.\n\n'
+              'This ensures notifications work even when your phone is in sleep mode.',
+              style: TextStyle(fontSize: 15),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Later'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await platform.invokeMethod(
+                    'requestIgnoreBatteryOptimizations',
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  foregroundColor: Colors.white,
+                ),
+                child: Text('Allow'),
+              ),
+            ],
+          ),
+        );
       }
     } catch (e) {
       debugPrint('Error checking battery optimization: $e');

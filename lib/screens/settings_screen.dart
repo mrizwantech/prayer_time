@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/ad_consent_service.dart';
 import '../core/time_format_settings.dart';
 import '../core/calculation_method_settings.dart';
 import '../core/prayer_time_service.dart';
@@ -29,6 +30,7 @@ class SettingsScreen extends StatelessWidget {
     final fontSettings = Provider.of<PrayerFontSettings>(context);
     final prayerThemeProvider = Provider.of<PrayerThemeProvider>(context);
     final ramadanSettings = Provider.of<RamadanReminderSettings>(context);
+    final adConsent = context.watch<AdConsentService?>();
 
     return Scaffold(
       body: HomeBackground(
@@ -149,6 +151,26 @@ class SettingsScreen extends StatelessWidget {
                     },
                   ),
                   Divider(),
+
+                  if (adConsent != null && adConsent.privacyOptionsRequired) ...[
+                    ListTile(
+                      leading: const Icon(Icons.privacy_tip_outlined),
+                      title: const Text('Ad privacy choices'),
+                      subtitle: const Text('Review or change your ad consent'),
+                      onTap: adConsent.busy
+                          ? null
+                          : () async {
+                              final opened = await adConsent.showPrivacyOptions();
+                              if (opened || !context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Could not open ad privacy choices. Please try again.'),
+                                ),
+                              );
+                            },
+                    ),
+                    const Divider(),
+                  ],
 
                   // Time Format
                   SwitchListTile(
